@@ -1,0 +1,6 @@
+{
+  "name": "DHD Construction Project Tracker",
+  "description": "Construction project management and cost-tracking application for real estate in the finishing phase. Tracks materials, work progress, labour, haulage, fiscal ledger, and budgets with live calculations in Nigerian Naira (₦).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
