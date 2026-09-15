@@ -13,6 +13,8 @@ import {
   LabourPayment,
   TransportationRecord,
   OtherExpenseRecord,
+  AuditEvent,
+  AggregatedMetrics,
 } from '../types';
 
 export function useTrackerData() {
@@ -34,16 +36,18 @@ export function useTrackerData() {
     };
   }, []);
 
-  const project = ConstructionTrackerService.getProject();
-  const materials = ConstructionTrackerService.getMaterials();
-  const purchases = ConstructionTrackerService.getPurchases();
-  const usage = ConstructionTrackerService.getMaterialUsage();
-  const workProgress = ConstructionTrackerService.getWorkProgress();
-  const contractors = ConstructionTrackerService.getContractors();
-  const labourPayments = ConstructionTrackerService.getLabourPayments();
-  const transportation = ConstructionTrackerService.getTransportation();
-  const otherExpenses = ConstructionTrackerService.getOtherExpenses();
-  const metrics = ConstructionTrackerService.getAggregatedMetrics();
+  const project: ProjectSettings = ConstructionTrackerService.getProject();
+  const materials: Material[] = ConstructionTrackerService.getMaterials();
+  const purchases: PurchaseRecord[] = ConstructionTrackerService.getPurchases();
+  const usage: MaterialUsage[] = ConstructionTrackerService.getMaterialUsage();
+  const workProgress: WorkProgressItem[] = ConstructionTrackerService.getWorkProgress();
+  const contractors: Contractor[] = ConstructionTrackerService.getContractors();
+  const labourPayments: LabourPayment[] = ConstructionTrackerService.getLabourPayments();
+  const transportation: TransportationRecord[] = ConstructionTrackerService.getTransportation();
+  const otherExpenses: OtherExpenseRecord[] = ConstructionTrackerService.getOtherExpenses();
+  const metrics: AggregatedMetrics = ConstructionTrackerService.getAggregatedMetrics();
+  const auditEvents: AuditEvent[] = ConstructionTrackerService.getAuditEvents();
+  const currentUser = ConstructionTrackerService.getCurrentUser();
 
   const refresh = useCallback(() => {
     setDataVersion((v) => v + 1);
@@ -63,6 +67,8 @@ export function useTrackerData() {
     otherExpenses,
     expenses: otherExpenses,
     metrics,
+    auditEvents,
+    currentUser,
     loading: false,
     // Service helpers
     saveMaterial: ConstructionTrackerService.saveMaterial.bind(ConstructionTrackerService),
@@ -91,5 +97,8 @@ export function useTrackerData() {
     clearAllData: ConstructionTrackerService.clearAllData.bind(ConstructionTrackerService),
     exportDatabaseJSON: ConstructionTrackerService.exportDatabaseJSON.bind(ConstructionTrackerService),
     importDatabaseJSON: ConstructionTrackerService.importDatabaseJSON.bind(ConstructionTrackerService),
+    signIn: ConstructionTrackerService.signIn.bind(ConstructionTrackerService),
+    signUp: ConstructionTrackerService.signUp.bind(ConstructionTrackerService),
+    logout: ConstructionTrackerService.logout.bind(ConstructionTrackerService),
   };
 }

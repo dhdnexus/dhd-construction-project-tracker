@@ -71,6 +71,7 @@ export default function App() {
     resetToSeedData,
     clearAllData,
     exportDatabaseJSON,
+    auditEvents,
   } = useTrackerData();
 
   // Active Tab state (synced with hash if present)
@@ -466,6 +467,7 @@ export default function App() {
           {activeTab === 'settings' && (
             <SettingsView
               project={project}
+              auditEvents={auditEvents}
               onUpdateProject={(updates) => {
                 updateProjectSettings(updates);
                 showToast('Project configuration saved.');

@@ -1,65 +1,92 @@
 /**
  * Currency & numerical formatters for Nigerian Naira (₦)
- * Tabular, accurate, rounded cleanly without floating-point quirks.
+ * Tabular, accurate, with safe integer kobo arithmetic (₦1 = 100 kobo).
  */
 
+export function toKobo(naira: number): number {
+  if (naira === null || naira === undefined || isNaN(naira) || !isFinite(naira)) return 0;
+  return Math.round(naira * 100);
+}
+
+export function fromKobo(kobo: number): number {
+  if (kobo === null || kobo === undefined || isNaN(kobo) || !isFinite(kobo)) return 0;
+  return Math.round(kobo) / 100;
+}
+
 export function formatNaira(amount: number | null | undefined, showDecimals: boolean = false): string {
-  if (amount === null || amount === undefined || isNaN(amount)) {
+  if (amount === null || amount === undefined || isNaN(amount) || !isFinite(amount)) {
     return '₦0';
   }
-  const rounded = showDecimals ? Number(amount.toFixed(2)) : Math.round(amount);
+  const isNegative = amount < 0;
+  const abs = Math.abs(amount);
+  const rounded = showDecimals ? Number(abs.toFixed(2)) : Math.round(abs);
   const formatted = rounded.toLocaleString('en-US', {
     minimumFractionDigits: showDecimals ? 2 : 0,
     maximumFractionDigits: showDecimals ? 2 : 0,
   });
-  return `₦${formatted}`;
+  return `${isNegative ? '-' : ''}₦${formatted}`;
 }
 
-export function formatNairaCompact(amount: number): string {
-  if (Math.abs(amount) >= 1_000_000) {
-    const val = amount / 1_000_000;
-    return `₦${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}M`;
+export function formatNairaCompact(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined || isNaN(amount) || !isFinite(amount)) {
+    return '₦0';
   }
-  if (Math.abs(amount) >= 1_000) {
-    const val = amount / 1_000;
-    return `₦${val % 1 === 0 ? val.toFixed(0) : val.toFixed(0)}K`;
+  const isNegative = amount < 0;
+  const abs = Math.abs(amount);
+  const sign = isNegative ? '-' : '';
+
+  if (abs >= 1_000_000_000) {
+    const val = abs / 1_000_000_000;
+    return `${sign}₦${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}B`;
   }
-  return formatNaira(amount);
+  if (abs >= 1_000_000) {
+    const val = abs / 1_000_000;
+    return `${sign}₦${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}M`;
+  }
+  if (abs >= 10_000) {
+    const val = abs / 1_000;
+    return `${sign}₦${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}K`;
+  }
+  if (abs >= 1_000) {
+    const val = abs / 1_000;
+    return `${sign}₦${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}K`;
+  }
+  return `${sign}${formatNaira(abs)}`;
 }
 
-export function parseNairaInput(val: string | number): number {
+export function parseNairaInput(val: string | number | null | undefined): number {
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (!val) return 0;
-  const clean = val.replace(/[^0-9.-]+/g, '');
+  const clean = String(val).replace(/[^0-9.-]+/g, '');
   const parsed = parseFloat(clean);
   return isNaN(parsed) ? 0 : parsed;
 }
 
-export function formatNumber(num: number): string {
-  if (isNaN(num) || num === null || num === undefined) return '0';
+export function formatNumber(num: number | null | undefined): string {
+  if (num === null || num === undefined || isNaN(num) || !isFinite(num)) return '0';
   return Math.round(num).toLocaleString('en-US');
 }
 
-export function formatDate(dateString: string): string {
+export function formatDate(dateString: string | null | undefined): string {
   if (!dateString) return '';
   try {
     const d = new Date(dateString);
-    if (isNaN(d.getTime())) return dateString;
+    if (isNaN(d.getTime())) return String(dateString);
     return d.toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
     });
   } catch {
-    return dateString;
+    return String(dateString);
   }
 }
 
-export function formatRelativeTime(dateString: string): string {
+export function formatRelativeTime(dateString: string | null | undefined): string {
   if (!dateString) return '';
   try {
     const d = new Date(dateString);
-    if (isNaN(d.getTime())) return dateString;
+    if (isNaN(d.getTime())) return String(dateString);
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
@@ -71,19 +98,20 @@ export function formatRelativeTime(dateString: string): string {
     if (diffDays < 7) return `${diffDays} days ago`;
     return formatDate(dateString);
   } catch {
-    return dateString;
+    return String(dateString);
   }
 }
 
 /**
- * Validates the critical calculation test:
- * Quantity: 10
- * Unit Price: 15,000 -> Material Cost: 150,000
+ * Validates purchase calculations with integer kobo precision:
+ * Quantity: 12
+ * Unit Price: 16,000 -> Material Cost: 192,000
  * Haulage: 20,000
  * Offloading: 5,000
- * Acquisition Cost: 175,000
+ * Landed Acquisition Cost: 217,000
  * Amount Paid: 100,000
- * Outstanding: 75,000
+ * Outstanding: 117,000
+ * Overpayment: 0
  */
 export function calculatePurchaseTotals(
   quantity: number,
@@ -100,13 +128,42 @@ export function calculatePurchaseTotals(
   const safeOther = Math.max(0, other);
   const safePaid = Math.max(0, amountPaid);
 
-  const materialCost = Math.round(safeQty * safePrice);
-  const acquisitionCost = materialCost + safeHaulage + safeOffload + safeOther;
-  const supplierBalance = Math.max(0, acquisitionCost - safePaid);
+  const unitPriceKobo = toKobo(safePrice);
+  const materialCostKobo = Math.round(safeQty * unitPriceKobo);
+  const haulageKobo = toKobo(safeHaulage);
+  const offloadKobo = toKobo(safeOffload);
+  const otherKobo = toKobo(safeOther);
+  const paidKobo = toKobo(safePaid);
+
+  const acquisitionCostKobo = materialCostKobo + haulageKobo + offloadKobo + otherKobo;
+  const balanceKobo = acquisitionCostKobo - paidKobo;
+
+  const materialCost = fromKobo(materialCostKobo);
+  const acquisitionCost = fromKobo(acquisitionCostKobo);
+  const supplierBalance = balanceKobo > 0 ? fromKobo(balanceKobo) : 0;
+  const supplierOverpayment = balanceKobo < 0 ? fromKobo(Math.abs(balanceKobo)) : 0;
 
   return {
     materialCost,
     acquisitionCost,
     supplierBalance,
+    supplierOverpayment,
+  };
+}
+
+/**
+ * Calculates contractor payment balances with integer kobo precision:
+ * Agreed: 1,000,000
+ * Paid: 650,000 -> Outstanding: 350,000, Overpayment: 0
+ * Paid: 1,100,000 -> Outstanding: 0, Overpayment: 100,000
+ */
+export function calculateLabourBalances(agreedAmount: number, totalPaid: number) {
+  const agreedKobo = toKobo(Math.max(0, agreedAmount));
+  const paidKobo = toKobo(Math.max(0, totalPaid));
+  const diffKobo = agreedKobo - paidKobo;
+
+  return {
+    outstandingBalance: diffKobo > 0 ? fromKobo(diffKobo) : 0,
+    overpayment: diffKobo < 0 ? fromKobo(Math.abs(diffKobo)) : 0,
   };
 }

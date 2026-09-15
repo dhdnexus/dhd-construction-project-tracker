@@ -8,7 +8,7 @@ interface PurchaseModalProps {
   onClose: () => void;
   onSave: (data: Omit<PurchaseRecord, 'id' | 'materialCost' | 'acquisitionCost' | 'supplierBalance' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
   initialData?: PurchaseRecord | null;
-  existingMaterials?: string[];
+  existingMaterials?: (string | { name: string; id?: string; category?: MaterialCategory; unit?: string })[];
 }
 
 const CATEGORIES: MaterialCategory[] = [
@@ -93,7 +93,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
   const numOther = typeof otherCost === 'number' ? otherCost : 0;
   const numPaid = typeof amountPaid === 'number' ? amountPaid : 0;
 
-  const { materialCost, acquisitionCost, supplierBalance } = calculatePurchaseTotals(
+  const { materialCost, acquisitionCost, supplierBalance, supplierOverpayment } = calculatePurchaseTotals(
     numQty,
     numUnitPrice,
     numHaulage,
@@ -120,6 +120,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
     try {
       onSave({
         id: initialData?.id,
+        materialId: initialData?.materialId,
         materialName: materialName.trim(),
         category,
         quantity: numQty,
@@ -184,9 +185,10 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
                 className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none font-medium text-[#081B38]"
               />
               <datalist id="material-suggestions">
-                {existingMaterials.map((m) => (
-                  <option key={m} value={m} />
-                ))}
+                {existingMaterials.map((m, idx) => {
+                  const val = typeof m === 'string' ? m : m.name;
+                  return <option key={idx} value={val} />;
+                })}
               </datalist>
             </div>
 
@@ -400,6 +402,14 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
                   {formatNaira(supplierBalance)}
                 </span>
               </div>
+              {supplierOverpayment > 0 && (
+                <div>
+                  <span className="text-[#34D399] text-[10px] uppercase font-bold block">Overpayment</span>
+                  <span className="font-mono font-bold text-[#34D399] text-sm">
+                    +{formatNaira(supplierOverpayment)}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </form>

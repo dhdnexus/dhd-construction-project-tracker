@@ -49,9 +49,12 @@ export const UsageModal: React.FC<UsageModalProps> = ({
   if (!isOpen) return null;
 
   const selectedMaterial = materials.find((m) => m.id === materialId);
-  const availableStock = selectedMaterial ? selectedMaterial.remaining : 0;
+  const effectiveAvailable =
+    initialData && initialData.materialId === selectedMaterial?.id
+      ? (selectedMaterial?.remaining || 0) + (initialData.quantityUsed || 0)
+      : (selectedMaterial?.remaining || 0);
   const numQty = typeof quantityUsed === 'number' ? quantityUsed : 0;
-  const isOverstock = numQty > availableStock;
+  const isOverstock = numQty > effectiveAvailable;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,9 +66,9 @@ export const UsageModal: React.FC<UsageModalProps> = ({
       setError('Quantity used must be greater than 0.');
       return;
     }
-    if (isOverstock && !initialData) {
+    if (isOverstock) {
       setError(
-        `Requested quantity (${numQty} ${selectedMaterial.unit}) exceeds available stock (${availableStock} ${selectedMaterial.unit}). Negative inventory is forbidden.`
+        `Requested quantity (${numQty} ${selectedMaterial.unit}) exceeds available stock (${effectiveAvailable} ${selectedMaterial.unit}). Negative inventory is forbidden.`
       );
       return;
     }
@@ -178,7 +181,7 @@ export const UsageModal: React.FC<UsageModalProps> = ({
             {isOverstock && (
               <p className="mt-1 text-xs text-[#BA1A1A] flex items-center gap-1 font-medium">
                 <AlertTriangle size={13} />
-                Exceeds available inventory of {availableStock} {selectedMaterial?.unit}!
+                Exceeds available inventory of {effectiveAvailable} {selectedMaterial?.unit}!
               </p>
             )}
           </div>

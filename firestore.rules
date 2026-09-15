@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isDocOwner() {
+      return isAuthenticated() && (
+        resource == null || resource.data.ownerId == request.auth.uid
+      );
+    }
+    function isNewDocOwner() {
+      return isAuthenticated() && (
+        request.resource == null || request.resource.data.ownerId == request.auth.uid
+      );
+    }
+
+    match /projects/{projectId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /materials/{materialId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /purchases/{purchaseId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /materialUsage/{usageId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /contractors/{contractorId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /labourPayments/{paymentId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /transportation/{transportId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /otherExpenses/{expenseId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /workProgress/{progressId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /categoryBudgets/{budgetId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+    match /auditEvents/{eventId} {
+      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+    }
+  }
+}

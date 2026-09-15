@@ -230,14 +230,20 @@ export const LabourView: React.FC<LabourViewProps> = ({
                       </div>
                       <div>
                         <span className="text-[10px] text-[#75777E] uppercase font-bold block">
-                          Balance
+                          {(contractor.overpayment && contractor.overpayment > 0) ? 'Overpaid' : 'Balance'}
                         </span>
                         <span
                           className={`font-bold ${
-                            isSettled ? 'text-[#059669]' : 'text-[#BA1A1A]'
+                            (contractor.overpayment && contractor.overpayment > 0)
+                              ? 'text-[#059669]'
+                              : isSettled
+                              ? 'text-[#059669]'
+                              : 'text-[#BA1A1A]'
                           }`}
                         >
-                          {formatNaira(contractor.outstandingBalance)}
+                          {(contractor.overpayment && contractor.overpayment > 0)
+                            ? `+${formatNaira(contractor.overpayment)}`
+                            : formatNaira(contractor.outstandingBalance)}
                         </span>
                       </div>
                     </div>

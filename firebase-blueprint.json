@@ -1,0 +1,215 @@
+{
+  "entities": {
+    "projects": {
+      "title": "Projects",
+      "description": "Construction and real estate site project definitions and master budget parameters",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "stage": { "type": "string" },
+        "handoverDate": { "type": "string" },
+        "budgetCap": { "type": "number" },
+        "activeArtisans": { "type": "number" },
+        "location": { "type": "string" },
+        "currencySymbol": { "type": "string" },
+        "timezone": { "type": "string" },
+        "siteAddress": { "type": "string" },
+        "projectManager": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "name", "code"]
+    },
+    "materials": {
+      "title": "Materials",
+      "description": "Finishing materials catalog and authoritative inventory balances",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "unit": { "type": "string" },
+        "totalPurchased": { "type": "number" },
+        "totalUsed": { "type": "number" },
+        "remaining": { "type": "number" },
+        "avgUnitPrice": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "supplier": { "type": "string" },
+        "lotNumber": { "type": "string" },
+        "image": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "name", "unit"]
+    },
+    "purchases": {
+      "title": "Purchases",
+      "description": "Authoritative material acquisitions, landed costs, and supplier liabilities",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "materialId": { "type": "string" },
+        "materialName": { "type": "string" },
+        "category": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "unitPrice": { "type": "number" },
+        "materialCost": { "type": "number" },
+        "haulageCost": { "type": "number" },
+        "offloadingCost": { "type": "number" },
+        "otherCost": { "type": "number" },
+        "acquisitionCost": { "type": "number" },
+        "amountPaid": { "type": "number" },
+        "supplierBalance": { "type": "number" },
+        "supplierOverpayment": { "type": "number" },
+        "supplier": { "type": "string" },
+        "purchaseDate": { "type": "string" },
+        "transportRecordId": { "type": "string" },
+        "waybillRef": { "type": "string" },
+        "notes": { "type": "string" },
+        "voucherImage": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "materialName", "quantity", "unitPrice"]
+    },
+    "materialUsage": {
+      "title": "Material Usage",
+      "description": "On-site material deployment and consumption logs with negative-stock prevention",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "materialId": { "type": "string" },
+        "materialName": { "type": "string" },
+        "quantityUsed": { "type": "number" },
+        "unit": { "type": "string" },
+        "workArea": { "type": "string" },
+        "subcontractor": { "type": "string" },
+        "date": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "materialId", "quantityUsed"]
+    },
+    "contractors": {
+      "title": "Contractors",
+      "description": "Subcontractors, artisans, trade agreements, and payment balances",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "trade": { "type": "string" },
+        "workDescription": { "type": "string" },
+        "agreedAmount": { "type": "number" },
+        "totalPaid": { "type": "number" },
+        "outstandingBalance": { "type": "number" },
+        "overpayment": { "type": "number" },
+        "isVerified": { "type": "boolean" }
+      },
+      "required": ["id", "ownerId", "name", "trade", "agreedAmount"]
+    },
+    "labourPayments": {
+      "title": "Labour Payments",
+      "description": "Progress disbursement tranches to artisans and subcontractors",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "contractorId": { "type": "string" },
+        "contractorName": { "type": "string" },
+        "trade": { "type": "string" },
+        "amount": { "type": "number" },
+        "milestoneTitle": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "paymentDate": { "type": "string" },
+        "receiptRef": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "contractorId", "amount", "milestoneTitle"]
+    },
+    "transportation": {
+      "title": "Transportation",
+      "description": "Site haulage and offloading logistics with purchase relationship tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "purchaseId": { "type": "string" },
+        "date": { "type": "string" },
+        "itemTransported": { "type": "string" },
+        "quantityDescription": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "transporter": { "type": "string" },
+        "cost": { "type": "number" },
+        "waybillRef": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "itemTransported", "cost"]
+    },
+    "otherExpenses": {
+      "title": "Other Expenses",
+      "description": "Site fuel, utilities, security, tools and sundry expenditures",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "paidBy": { "type": "string" },
+        "receiptRef": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "description", "amount", "category"]
+    },
+    "workProgress": {
+      "title": "Work Progress",
+      "description": "Milestone stages, budget allocations, and percentage completion tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "status": { "type": "string" },
+        "completionPercent": { "type": "number" },
+        "expectedBudget": { "type": "number" },
+        "actualPaid": { "type": "number" },
+        "outstanding": { "type": "number" },
+        "startDate": { "type": "string" },
+        "targetDate": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "name", "completionPercent"]
+    },
+    "auditEvents": {
+      "title": "Audit Events",
+      "description": "Historical audit trail of all site financial and inventory actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "user": { "type": "string" },
+        "action": { "type": "string" },
+        "entity": { "type": "string" },
+        "entityId": { "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "required": ["id", "ownerId", "timestamp", "action", "entity", "summary"]
+    }
+  }
+}

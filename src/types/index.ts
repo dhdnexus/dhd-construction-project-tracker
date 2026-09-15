@@ -29,6 +29,7 @@ export type PaymentMethod = 'Transfer' | 'Cash' | 'Cheque';
 
 export interface ProjectSettings {
   id: string;
+  ownerId?: string;
   name: string;
   code: string;
   stage: string;
@@ -40,18 +41,22 @@ export interface ProjectSettings {
   timezone: string;
   siteAddress?: string;
   projectManager?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Material {
   id: string;
+  projectId?: string;
+  ownerId?: string;
   name: string;
   category: MaterialCategory;
   unit: string; // e.g. 'boxes', 'bags', 'drums', 'lengths'
   totalPurchased: number;
   totalUsed: number;
-  remaining: number; // totalPurchased - totalUsed
+  remaining: number; // totalPurchased - totalUsed (always >= 0)
   avgUnitPrice: number; // weighted average unit price
-  totalCost: number; // total cost spent on this material
+  totalCost: number; // total acquisition cost spent on this material
   supplier: string;
   lotNumber?: string;
   image?: string;
@@ -62,6 +67,8 @@ export interface Material {
 
 export interface PurchaseRecord {
   id: string;
+  projectId?: string;
+  ownerId?: string;
   materialId?: string;
   materialName: string;
   category: MaterialCategory;
@@ -72,11 +79,13 @@ export interface PurchaseRecord {
   haulageCost: number;
   offloadingCost: number;
   otherCost: number;
-  acquisitionCost: number; // materialCost + haulageCost + offloadingCost + otherCost
-  amountPaid: number;
-  supplierBalance: number; // acquisitionCost - amountPaid
+  acquisitionCost: number; // materialCost + haulageCost + offloadingCost + otherCost (Landed Acquisition Cost)
+  amountPaid: number; // Cash paid to supplier
+  supplierBalance: number; // acquisitionCost - amountPaid (clamped to 0 if paid in full or overpaid)
+  supplierOverpayment?: number; // amountPaid - acquisitionCost if amountPaid > acquisitionCost
   supplier: string;
   purchaseDate: string;
+  transportRecordId?: string; // Explicit link to separate transport record if exists
   waybillRef?: string;
   notes?: string;
   voucherImage?: string;
@@ -86,7 +95,9 @@ export interface PurchaseRecord {
 
 export interface MaterialUsage {
   id: string;
-  materialId: string;
+  projectId?: string;
+  ownerId?: string;
+  materialId: string; // Authoritative reference to Material
   materialName: string;
   quantityUsed: number;
   unit: string;
@@ -95,17 +106,20 @@ export interface MaterialUsage {
   date: string;
   notes?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface WorkProgressItem {
   id: string;
+  projectId?: string;
+  ownerId?: string;
   name: string;
   category: string;
   status: WorkStatus;
   completionPercent: number; // 0 - 100
-  expectedBudget: number;
-  actualPaid: number;
-  outstanding: number; // expectedBudget - actualPaid
+  expectedBudget: number; // Milestone/stream budget
+  actualPaid: number; // Actual disbursed
+  outstanding: number; // expectedBudget - actualPaid (unbilled/remaining budget)
   startDate: string;
   targetDate: string;
   zone?: string;
@@ -117,12 +131,15 @@ export interface WorkProgressItem {
 
 export interface Contractor {
   id: string;
+  projectId?: string;
+  ownerId?: string;
   name: string;
   trade: string; // e.g. "Tiling", "POP Plaster", "Plumbing"
   workDescription: string;
-  agreedAmount: number;
-  totalPaid: number;
-  outstandingBalance: number; // agreedAmount - totalPaid
+  agreedAmount: number; // Contractual obligation
+  totalPaid: number; // Total payments logged
+  outstandingBalance: number; // max(0, agreedAmount - totalPaid)
+  overpayment?: number; // max(0, totalPaid - agreedAmount) if paid > agreed
   avatar?: string;
   isVerified: boolean;
   notes?: string;
@@ -132,10 +149,12 @@ export interface Contractor {
 
 export interface LabourPayment {
   id: string;
-  contractorId: string;
+  projectId?: string;
+  ownerId?: string;
+  contractorId: string; // Authoritative reference to Contractor
   contractorName: string;
   trade: string;
-  amount: number;
+  amount: number; // Payment in Naira
   milestoneTitle: string; // e.g. "1st Tranche - Screeding & Layout"
   paymentMethod: PaymentMethod;
   paymentDate: string;
@@ -146,6 +165,9 @@ export interface LabourPayment {
 
 export interface TransportationRecord {
   id: string;
+  projectId?: string;
+  ownerId?: string;
+  purchaseId?: string; // Explicit link to PurchaseRecord. If linked, haulage is consolidated with purchase to avoid double-counting.
   date: string;
   itemTransported: string;
   quantityDescription: string;
@@ -160,6 +182,8 @@ export interface TransportationRecord {
 
 export interface OtherExpenseRecord {
   id: string;
+  projectId?: string;
+  ownerId?: string;
   category: ExpenseCategory;
   description: string;
   amount: number;
@@ -183,4 +207,57 @@ export interface BudgetCostItem {
   remaining: number;
   percentUsed: number;
   status: BudgetHealthStatus;
+}
+
+export interface AuditEvent {
+  id: string;
+  projectId?: string;
+  ownerId?: string;
+  timestamp: string;
+  user: string;
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESET' | 'RESTORE';
+  entity:
+    | 'Purchase'
+    | 'Material'
+    | 'MaterialUsage'
+    | 'Contractor'
+    | 'LabourPayment'
+    | 'Transportation'
+    | 'OtherExpense'
+    | 'WorkProgress'
+    | 'ProjectSettings'
+    | 'System';
+  entityId: string;
+  summary: string;
+}
+
+export interface AggregatedMetrics {
+  project: ProjectSettings;
+  cashExpenditure: number; // Total Cash Paid across all streams
+  committedCost: number;   // Total Incurred contractual/landed obligations
+  totalSpent: number;      // Primary metric (committed landed spend)
+  budgetCap: number;
+  remainingBuffer: number; // budgetCap - totalSpent
+  contingencyPercent: number;
+  spentPercent: number;
+  totalOutstanding: number; // Total unpaid liabilities
+  supplierOutstanding: number;
+  contractorOutstanding: number;
+  totalOverpayments: number;
+  supplierOverpayment: number;
+  contractorOverpayment: number;
+  forecastRemainingCost: number;
+  materialSpent: number;
+  labourSpent: number;
+  transportationSpent: number;
+  otherSpent: number;
+  directTransportSpent: number;
+  purchaseHaulageSpent: number;
+  stockInStoreValue: number;
+  lowStockCount: number;
+  depletedCount: number;
+  budgetCategories: BudgetCostItem[];
+  materialsCount: number;
+  activeStreamsCount: number;
+  overallCompletionPercent: number;
 }
