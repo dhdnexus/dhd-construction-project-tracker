@@ -24,6 +24,8 @@ import { ExpenseModal } from './components/modals/ExpenseModal';
 import { WorkStreamModal } from './components/modals/WorkStreamModal';
 import { ContractorModal } from './components/modals/ContractorModal';
 import { ConfirmDeleteModal } from './components/modals/ConfirmDeleteModal';
+import { AuthModal } from './components/modals/AuthModal';
+import { ProjectModal } from './components/modals/ProjectModal';
 
 import {
   PurchaseRecord,
@@ -40,6 +42,8 @@ import { formatNairaCompact } from './utils/formatters';
 export default function App() {
   const {
     project,
+    projects,
+    activeProjectId,
     materials,
     purchases,
     usage,
@@ -50,6 +54,16 @@ export default function App() {
     expenses,
     metrics,
     loading,
+    userProfile,
+    syncStatus,
+    lastError,
+    clearError,
+    switchProject,
+    createProject,
+    deleteProject,
+    signIn,
+    signUp,
+    logout,
     savePurchase,
     deletePurchase,
     saveUsage,
@@ -73,6 +87,10 @@ export default function App() {
     exportDatabaseJSON,
     auditEvents,
   } = useTrackerData();
+
+  // Multi-project & Auth Modal state
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
 
   // Active Tab state (synced with hash if present)
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -158,7 +176,7 @@ export default function App() {
       <div className="min-h-screen bg-[#F9F9FF] flex flex-col items-center justify-center space-y-4">
         <div className="w-10 h-10 border-3 border-[#0F1E36] border-t-transparent rounded-full animate-spin" />
         <p className="font-mono text-xs font-bold text-[#081B38] tracking-wider uppercase">
-          Initializing DHD Construction Tracker...
+          Initializing Construction Project Tracker...
         </p>
       </div>
     );
@@ -182,6 +200,10 @@ export default function App() {
         project={project}
         lowStockCount={metrics.lowStockCount}
         outstandingTotal={metrics.totalOutstanding ? formatNairaCompact(metrics.totalOutstanding) : '₦0'}
+        syncStatus={syncStatus}
+        userProfile={userProfile}
+        lastError={lastError}
+        onClearError={clearError}
         onOpenPurchaseModal={() => {
           setSelectedPurchase(null);
           setPurchaseModalOpen(true);
@@ -191,6 +213,8 @@ export default function App() {
           setDefaultUsageMaterialId(undefined);
           setUsageModalOpen(true);
         }}
+        onOpenAuthModal={() => setAuthModalOpen(true)}
+        onOpenProjectModal={() => setProjectModalOpen(true)}
         onResetData={() => {
           resetToSeedData();
           showToast('Demo data restored.');
@@ -201,7 +225,7 @@ export default function App() {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `dhd_backup_${new Date().toISOString().split('T')[0]}.json`;
+          a.download = `tracker_backup_${new Date().toISOString().split('T')[0]}.json`;
           a.click();
           URL.revokeObjectURL(url);
           showToast('Site database backup exported.');
@@ -467,10 +491,26 @@ export default function App() {
           {activeTab === 'settings' && (
             <SettingsView
               project={project}
+              projects={projects}
+              activeProjectId={activeProjectId}
+              userProfile={userProfile}
               auditEvents={auditEvents}
               onUpdateProject={(updates) => {
                 updateProjectSettings(updates);
                 showToast('Project configuration saved.');
+              }}
+              onSwitchProject={async (id) => {
+                await switchProject(id);
+                showToast('Switched active project.');
+              }}
+              onCreateProject={async (data) => {
+                const newP = await createProject(data);
+                showToast(`Project "${newP.name}" created.`);
+                return newP;
+              }}
+              onDeleteProject={async (id) => {
+                await deleteProject(id);
+                showToast('Project removed.');
               }}
               onResetSeedData={() => {
                 resetToSeedData();
@@ -480,6 +520,7 @@ export default function App() {
                 clearAllData();
                 showToast('Site data wiped.');
               }}
+              onOpenAuthModal={() => setAuthModalOpen(true)}
             />
           )}
         </main>
@@ -571,6 +612,31 @@ export default function App() {
         title={deleteModal.title}
         message={deleteModal.message}
         itemName={deleteModal.itemName}
+      />
+
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        userProfile={userProfile}
+        onSignIn={signIn}
+        onSignUp={signUp}
+        onLogout={logout}
+      />
+
+      <ProjectModal
+        isOpen={projectModalOpen}
+        onClose={() => setProjectModalOpen(false)}
+        projects={projects}
+        activeProjectId={activeProjectId}
+        onSwitchProject={async (id) => {
+          await switchProject(id);
+          showToast('Switched active project.');
+        }}
+        onCreateProject={async (data) => {
+          const newP = await createProject(data);
+          showToast(`Project "${newP.name}" created.`);
+          return newP;
+        }}
       />
     </div>
   );

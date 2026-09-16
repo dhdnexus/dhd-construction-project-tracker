@@ -29,6 +29,11 @@ service cloud.firestore {
         resource.data.projectId == request.resource.data.projectId;
     }
 
+    function isUserProject(projId) {
+      return exists(/databases/$(database)/documents/projects/$(projId)) &&
+        get(/databases/$(database)/documents/projects/$(projId)).data.ownerId == request.auth.uid;
+    }
+
     // 1. Projects
     match /projects/{projectId} {
       allow read: if isExistingDocOwner();
@@ -40,7 +45,7 @@ service cloud.firestore {
     // 2. Materials
     match /materials/{materialId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
     }
@@ -48,7 +53,7 @@ service cloud.firestore {
     // 3. Purchases
     match /purchases/{purchaseId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
     }
@@ -56,7 +61,7 @@ service cloud.firestore {
     // 4. Material Usage
     match /materialUsage/{usageId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
     }
@@ -64,7 +69,7 @@ service cloud.firestore {
     // 5. Contractors
     match /contractors/{contractorId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
     }
@@ -72,7 +77,7 @@ service cloud.firestore {
     // 6. Labour Payments
     match /labourPayments/{paymentId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
     }
@@ -80,7 +85,7 @@ service cloud.firestore {
     // 7. Transportation & Haulage
     match /transportation/{transportId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
     }
@@ -88,7 +93,7 @@ service cloud.firestore {
     // 8. Other Site Expenses
     match /otherExpenses/{expenseId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
     }
@@ -96,7 +101,7 @@ service cloud.firestore {
     // 9. Work Progress Milestones
     match /workProgress/{progressId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
     }
@@ -104,17 +109,17 @@ service cloud.firestore {
     // 10. Category Budgets
     match /categoryBudgets/{budgetId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
     }
 
-    // 11. Audit Events
+    // 11. Audit Events (strictly append-only: create allowed, update denied, delete denied)
     match /auditEvents/{eventId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
-      allow update: if false; // Audit logs are append-only
-      allow delete: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
+      allow update: if false; // Append-only audit events
+      allow delete: if false; // Denied per Requirement 4
     }
 
     // Default deny

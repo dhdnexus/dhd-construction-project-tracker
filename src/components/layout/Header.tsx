@@ -1,15 +1,34 @@
 import React, { useState } from 'react';
 import { AppLogo } from '../common/AppLogo';
-import { Bell, MoreVertical, User, CheckCircle2, AlertTriangle, RefreshCw, Download, Plus } from 'lucide-react';
-import { ProjectSettings } from '../../types';
+import {
+  Bell,
+  MoreVertical,
+  User,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  Download,
+  Plus,
+  Building,
+  Cloud,
+  CloudOff,
+  Loader2,
+} from 'lucide-react';
+import { ProjectSettings, SyncStatus, UserProfile } from '../../types';
 
 interface HeaderProps {
   currentTab: string;
   project: ProjectSettings;
   lowStockCount: number;
   outstandingTotal: string;
+  syncStatus?: SyncStatus;
+  userProfile?: UserProfile;
+  lastError?: string | null;
+  onClearError?: () => void;
   onOpenPurchaseModal: () => void;
   onOpenUsageModal: () => void;
+  onOpenAuthModal?: () => void;
+  onOpenProjectModal?: () => void;
   onResetData: () => void;
   onExportJSON: () => void;
   onNavigate: (tab: string) => void;
@@ -20,8 +39,14 @@ export const Header: React.FC<HeaderProps> = ({
   project,
   lowStockCount,
   outstandingTotal,
+  syncStatus = 'synced',
+  userProfile,
+  lastError,
+  onClearError,
   onOpenPurchaseModal,
   onOpenUsageModal,
+  onOpenAuthModal,
+  onOpenProjectModal,
   onResetData,
   onExportJSON,
   onNavigate,
@@ -54,10 +79,12 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  const isAuthUser = userProfile && !userProfile.isAnonymous && !!userProfile.email;
+
   return (
     <header className="fixed top-0 w-full z-40 bg-[#F9F9FF]/95 backdrop-blur-xl border-b border-[#E8EDFF] shadow-[0_1px_8px_rgba(0,0,0,0.03)] pt-safe">
       <div className="h-16 max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between gap-3">
-        {/* Left: Brand Identity */}
+        {/* Left: Brand Identity & Active Project */}
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <button
             onClick={() => onNavigate('dashboard')}
@@ -67,15 +94,63 @@ export const Header: React.FC<HeaderProps> = ({
             <AppLogo size={34} />
           </button>
           <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <span className="font-bold text-[#081B38] text-[15px] sm:text-base truncate leading-tight tracking-tight">
-                DHD Construction Tracker
+                Construction Project Tracker
               </span>
+
+              {/* Sync Status indicator */}
+              <div className="hidden sm:flex items-center">
+                {syncStatus === 'saving' && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#6B46C1] bg-[#F3E8FF] px-2 py-0.5 rounded-full">
+                    <Loader2 size={10} className="animate-spin" />
+                    <span>Saving...</span>
+                  </span>
+                )}
+                {syncStatus === 'synced' && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#15803D] bg-[#DCFCE7] px-2 py-0.5 rounded-full">
+                    <Cloud size={11} />
+                    <span>Live</span>
+                  </span>
+                )}
+                {syncStatus === 'offline' && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#B45309] bg-[#FEF3C7] px-2 py-0.5 rounded-full">
+                    <CloudOff size={11} />
+                    <span>Offline</span>
+                  </span>
+                )}
+                {syncStatus === 'error' && (
+                  <button
+                    onClick={onClearError}
+                    title={lastError || 'Sync issue'}
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#DC2626] bg-[#FEE2E2] px-2 py-0.5 rounded-full hover:bg-[#FECACA] cursor-pointer"
+                  >
+                    <AlertTriangle size={11} />
+                    <span>Sync Error</span>
+                  </button>
+                )}
+              </div>
             </div>
+
             <div className="flex items-center gap-1.5 text-xs">
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[#E0E8FF] text-[#0F1E36] text-[10px] font-bold uppercase tracking-wider">
-                Finishing Phase • {project?.code || 'Site B'}
-              </span>
+              {/* Project selector badge */}
+              {onOpenProjectModal ? (
+                <button
+                  type="button"
+                  onClick={onOpenProjectModal}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#E0E8FF] hover:bg-[#D0DEFF] text-[#0F1E36] text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                  title="Switch or create project"
+                >
+                  <Building size={10} />
+                  <span className="truncate max-w-[130px] sm:max-w-[180px]">{project?.name || 'Finishing Site'}</span>
+                  <span className="opacity-60">{project?.code}</span>
+                </button>
+              ) : (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[#E0E8FF] text-[#0F1E36] text-[10px] font-bold uppercase tracking-wider">
+                  {project?.name || 'Finishing Phase'} • {project?.code || 'Site'}
+                </span>
+              )}
+
               <span className="text-[#75777E] hidden sm:inline">•</span>
               <span className="text-[#75777E] font-medium truncate hidden sm:inline">
                 {getTabLabel(currentTab)}
@@ -174,6 +249,18 @@ export const Header: React.FC<HeaderProps> = ({
 
             {showQuickMenu && (
               <div className="absolute right-0 top-12 w-56 bg-white rounded-xl shadow-xl border border-[#E8EDFF] p-1.5 z-50 text-sm animate-in fade-in zoom-in-95 duration-150">
+                {onOpenProjectModal && (
+                  <button
+                    onClick={() => {
+                      onOpenProjectModal();
+                      setShowQuickMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-[#081B38] hover:bg-[#E8EDFF] rounded-lg cursor-pointer"
+                  >
+                    <Building size={16} className="text-[#0F1E36]" />
+                    <span>Projects & Sites</span>
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     onOpenPurchaseModal();
@@ -231,13 +318,23 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* User Avatar */}
+          {/* User Account Button */}
           <button
-            onClick={() => onNavigate('settings')}
-            title="Project Settings"
-            className="w-8 h-8 rounded-full bg-[#000412] flex items-center justify-center text-white ml-0.5 cursor-pointer hover:ring-2 hover:ring-[#6B46C1] transition-all"
+            onClick={() => {
+              if (onOpenAuthModal) onOpenAuthModal();
+              else onNavigate('settings');
+            }}
+            title={isAuthUser ? `Signed in as ${userProfile.email}` : 'Sign In / User Profile'}
+            className={`h-8 px-2.5 rounded-full flex items-center gap-1.5 text-xs font-bold ml-0.5 cursor-pointer transition-all ${
+              isAuthUser
+                ? 'bg-[#DCFCE7] text-[#15803D] hover:bg-[#BBF7D0] border border-[#86EFAC]'
+                : 'bg-[#000412] text-white hover:bg-[#0F1E36]'
+            }`}
           >
-            <User size={16} />
+            <User size={14} />
+            <span className="hidden sm:inline max-w-[90px] truncate">
+              {isAuthUser ? userProfile.displayName || userProfile.email?.split('@')[0] : 'Sign In'}
+            </span>
           </button>
         </div>
       </div>

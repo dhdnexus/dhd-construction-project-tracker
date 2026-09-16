@@ -27,18 +27,30 @@ export type ExpenseCategory =
 
 export type PaymentMethod = 'Transfer' | 'Cash' | 'Cheque';
 
+export type SyncStatus = 'synced' | 'saving' | 'error' | 'offline';
+
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  isAnonymous: boolean;
+}
+
 export interface ProjectSettings {
   id: string;
   ownerId?: string;
   name: string;
   code: string;
   stage: string;
+  startDate?: string;
+  status?: string;
   handoverDate: string;
   budgetCap: number; // in Naira (e.g. 27000000)
   budgetCapKobo?: number; // integer kobo (e.g. 2700000000)
   activeArtisans: number;
   location: string;
   currencySymbol: string;
+  currency?: string;
   timezone: string;
   siteAddress?: string;
   projectManager?: string;
@@ -60,6 +72,7 @@ export interface Material {
   remaining: number; // totalPurchased - totalUsed (always >= 0)
   avgUnitPrice: number; // weighted average unit price in Naira
   avgUnitPriceKobo?: number; // weighted average unit price in kobo
+  unitPriceKobo?: number; // alias
   totalCost: number; // total acquisition cost spent on this material
   totalCostKobo?: number;
   supplier: string;
@@ -132,8 +145,11 @@ export interface WorkProgressItem {
   status: WorkStatus;
   completionPercent: number; // 0 - 100
   expectedBudget: number; // Milestone/stream budget
+  expectedBudgetKobo?: number;
   actualPaid: number; // Actual disbursed
+  actualPaidKobo?: number;
   outstanding: number; // expectedBudget - actualPaid (unbilled/remaining budget)
+  outstandingKobo?: number;
   startDate: string;
   targetDate: string;
   zone?: string;
@@ -236,6 +252,7 @@ export interface AuditEvent {
   ownerId?: string;
   timestamp: string;
   user: string;
+  userEmail?: string;
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RESET' | 'RESTORE';
   entity:
     | 'Purchase'
@@ -247,9 +264,12 @@ export interface AuditEvent {
     | 'OtherExpense'
     | 'WorkProgress'
     | 'ProjectSettings'
-    | 'System';
+    | 'System'
+    | string;
+  entityType?: string;
   entityId: string;
   summary: string;
+  details?: string;
 }
 
 export interface AggregatedMetrics {

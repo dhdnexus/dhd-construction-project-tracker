@@ -7,34 +7,45 @@ import {
   Upload,
   Trash2,
   Check,
-  AlertCircle,
-  Database,
-  Building,
-  Calendar,
-  DollarSign,
   ShieldCheck,
   Activity,
   User,
-  Clock,
+  Building,
+  Plus,
+  Lock,
 } from 'lucide-react';
-import { ProjectSettings, AuditEvent } from '../types';
-import { formatNaira, formatDate, formatRelativeTime } from '../utils/formatters';
+import { ProjectSettings, AuditEvent, UserProfile } from '../types';
+import { formatNaira, formatRelativeTime } from '../utils/formatters';
 import { ConstructionTrackerService } from '../services/storage';
 
 interface SettingsViewProps {
   project: ProjectSettings;
+  projects?: ProjectSettings[];
+  activeProjectId?: string;
+  userProfile?: UserProfile;
   auditEvents?: AuditEvent[];
   onUpdateProject: (updates: Partial<ProjectSettings>) => void;
+  onSwitchProject?: (id: string) => Promise<void>;
+  onCreateProject?: (data: Partial<ProjectSettings>) => Promise<ProjectSettings>;
+  onDeleteProject?: (id: string) => Promise<void>;
   onResetSeedData: () => void;
   onClearAllData: () => void;
+  onOpenAuthModal?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   project,
+  projects = [],
+  activeProjectId = '',
+  userProfile,
   auditEvents = [],
   onUpdateProject,
+  onSwitchProject,
+  onCreateProject,
+  onDeleteProject,
   onResetSeedData,
   onClearAllData,
+  onOpenAuthModal,
 }) => {
   const [name, setName] = useState(project?.name || '');
   const [code, setCode] = useState(project?.code || '');
@@ -45,6 +56,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeArtisans, setActiveArtisans] = useState<number | string>(project?.activeArtisans || 0);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // New project creation state in Settings
+  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
+  const [newProjName, setNewProjName] = useState('');
+  const [newProjCode, setNewProjCode] = useState('');
+  const [newProjBudget, setNewProjBudget] = useState('25000000');
+  const [creatingProject, setCreatingProject] = useState(false);
 
   useEffect(() => {
     if (project) {
@@ -64,6 +82,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       name,
       code,
       siteAddress,
+      location: siteAddress,
       budgetCap: typeof budgetCap === 'number' ? budgetCap : parseFloat(String(budgetCap)) || 0,
       handoverDate,
       projectManager,
@@ -73,13 +92,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
+  const handleCreateProjectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjName.trim() || !onCreateProject) return;
+    setCreatingProject(true);
+    try {
+      await onCreateProject({
+        name: newProjName.trim(),
+        code: newProjCode.trim() || `#PRJ-${Math.floor(100 + Math.random() * 900)}`,
+        budgetCap: parseFloat(newProjBudget) || 25000000,
+        siteAddress: 'Lagos, Nigeria',
+      });
+      setNewProjName('');
+      setNewProjCode('');
+      setShowNewProjectForm(false);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to create project.');
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
   const handleExportJSON = () => {
     const jsonString = ConstructionTrackerService.exportDatabaseJSON();
     const blob = new Blob([jsonString], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `dhd_construction_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `tracker_backup_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -98,7 +140,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         } else {
           alert('Failed to parse or restore database JSON. Please verify the file.');
         }
-      } catch (err) {
+      } catch {
         alert('Failed to read backup file.');
       }
     };
@@ -106,6 +148,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const eventsList = auditEvents.length > 0 ? auditEvents : ConstructionTrackerService.getAuditEvents();
+  const isAuthUser = userProfile && !userProfile.isAnonymous && !!userProfile.email;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200 max-w-4xl">
@@ -121,13 +164,170 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             Site Settings & Configuration
           </h1>
           <p className="text-xs text-[#75777E] mt-0.5">
-            Manage project parameters, currency, financial ceilings and database backups
+            Manage project parameters, currency, financial ceilings, multi-project workspaces and database backups
           </p>
         </div>
 
         <div className="w-10 h-10 rounded-2xl bg-[#F1F3FF] text-[#081B38] flex items-center justify-center">
           <SettingsIcon size={20} />
         </div>
+      </div>
+
+      {/* Account & Multi-Project Workspace Card */}
+      <div className="bg-white rounded-2xl border border-[#E8EDFF] p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#E8EDFF]">
+          <div>
+            <h2 className="text-sm font-bold text-[#081B38] uppercase tracking-wider flex items-center gap-2">
+              <Building size={16} className="text-[#0F1E36]" />
+              Multi-Project Workspaces ({projects.length || 1})
+            </h2>
+            <p className="text-xs text-[#75777E] mt-0.5">
+              Switch between isolated construction sites or establish a new project ledger
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {onOpenAuthModal && (
+              <button
+                type="button"
+                onClick={onOpenAuthModal}
+                className="h-9 px-3 rounded-xl border border-[#E8EDFF] hover:bg-[#F1F3FF] text-xs font-bold text-[#081B38] flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <User size={14} />
+                <span>{isAuthUser ? userProfile.email : 'Sign In / Account'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowNewProjectForm(!showNewProjectForm)}
+              className="h-9 px-3 rounded-xl bg-[#000412] hover:bg-[#0F1E36] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+            >
+              <Plus size={14} />
+              <span>New Site</span>
+            </button>
+          </div>
+        </div>
+
+        {/* New Project Inline Form */}
+        {showNewProjectForm && (
+          <form onSubmit={handleCreateProjectSubmit} className="p-4 rounded-xl bg-[#F9F9FF] border border-[#E8EDFF] space-y-3">
+            <h3 className="text-xs font-bold text-[#081B38] uppercase tracking-wider">Initialize New Site Workspace</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-[#75777E] uppercase mb-1">Project Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={newProjName}
+                  onChange={(e) => setNewProjName(e.target.value)}
+                  placeholder="e.g. Lekki Phase 2 Site"
+                  className="w-full h-9 px-3 text-xs bg-white border border-[#C5C6CE] rounded-lg outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-[#75777E] uppercase mb-1">Project Code</label>
+                <input
+                  type="text"
+                  value={newProjCode}
+                  onChange={(e) => setNewProjCode(e.target.value)}
+                  placeholder="e.g. #LK2-885"
+                  className="w-full h-9 px-3 text-xs font-mono bg-white border border-[#C5C6CE] rounded-lg outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-[#75777E] uppercase mb-1">Budget Cap (₦)</label>
+                <input
+                  type="number"
+                  value={newProjBudget}
+                  onChange={(e) => setNewProjBudget(e.target.value)}
+                  placeholder="25,000,000"
+                  className="w-full h-9 px-3 text-xs font-mono bg-white border border-[#C5C6CE] rounded-lg outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowNewProjectForm(false)}
+                className="h-8 px-3 text-xs text-[#75777E] hover:text-[#081B38] cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creatingProject}
+                className="h-8 px-4 bg-[#000412] hover:bg-[#0F1E36] text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer"
+              >
+                {creatingProject ? 'Creating...' : 'Create Site'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Existing Projects List */}
+        {projects.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {projects.map((p) => {
+              const isActive = p.id === (activeProjectId || project.id);
+              return (
+                <div
+                  key={p.id}
+                  className={`p-3.5 rounded-xl border transition-all flex items-center justify-between ${
+                    isActive
+                      ? 'border-[#081B38] bg-[#F1F3FF]/70 shadow-xs'
+                      : 'border-[#E8EDFF] bg-white hover:border-[#081B38]/40'
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#081B38] truncate">{p.name}</span>
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white text-[#75777E] border border-[#E8EDFF]">
+                        {p.code}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[#75777E] mt-0.5">
+                      Budget Cap: <span className="font-semibold text-[#081B38]">{formatNaira(p.budgetCap)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    {isActive ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC]">
+                        Active
+                      </span>
+                    ) : (
+                      onSwitchProject && (
+                        <button
+                          type="button"
+                          onClick={() => onSwitchProject(p.id)}
+                          className="h-7 px-2.5 text-[11px] font-bold text-[#081B38] bg-white hover:bg-[#E8EDFF] border border-[#E8EDFF] rounded-lg transition-colors cursor-pointer"
+                        >
+                          Switch
+                        </button>
+                      )
+                    )}
+
+                    {onDeleteProject && projects.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`Delete project "${p.name}"? This removes its records from Firestore.`)) {
+                            onDeleteProject(p.id);
+                          }
+                        }}
+                        className="w-7 h-7 flex items-center justify-center text-[#75777E] hover:text-[#BA1A1A] hover:bg-[#FFDAD6] rounded-lg transition-colors cursor-pointer"
+                        title="Delete project"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Cloud Persistence Status Card */}
@@ -144,7 +344,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-[#75777E] mt-0.5">
-              Authoritative multi-client synchronization with ownership security rules and real-time listeners.
+              Multi-project tenant isolation with Firestore security rules and real-time listeners.
             </p>
           </div>
         </div>
@@ -167,10 +367,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       )}
 
-      {/* Form Card */}
+      {/* Form Card for Active Project */}
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-[#E8EDFF] p-6 shadow-xs space-y-5">
         <h2 className="text-sm font-bold text-[#081B38] uppercase tracking-wider pb-3 border-b border-[#E8EDFF]">
-          Site Identity & Delivery Parameters
+          Active Site Parameters ({project.name})
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -183,7 +383,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none font-semibold text-[#081B38]"
+              className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none font-semibold text-[#081B38]"
             />
           </div>
 
@@ -196,7 +396,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               required
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none font-semibold text-[#081B38]"
+              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none font-semibold text-[#081B38]"
             />
           </div>
         </div>
@@ -210,7 +410,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             required
             value={siteAddress}
             onChange={(e) => setSiteAddress(e.target.value)}
-            className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none text-[#081B38]"
+            className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none text-[#081B38]"
           />
         </div>
 
@@ -222,9 +422,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <input
               type="number"
               required
+              min="0"
               value={budgetCap}
               onChange={(e) => setBudgetCap(parseFloat(e.target.value) || 0)}
-              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none font-bold text-[#081B38]"
+              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none font-bold text-[#081B38]"
             />
           </div>
 
@@ -237,7 +438,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               required
               value={handoverDate}
               onChange={(e) => setHandoverDate(e.target.value)}
-              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none text-[#081B38]"
+              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none text-[#081B38]"
             />
           </div>
 
@@ -251,7 +452,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               required
               value={activeArtisans}
               onChange={(e) => setActiveArtisans(parseInt(e.target.value) || 0)}
-              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none text-[#081B38]"
+              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none text-[#081B38]"
             />
           </div>
         </div>
@@ -266,7 +467,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               required
               value={projectManager}
               onChange={(e) => setProjectManager(e.target.value)}
-              className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none text-[#081B38]"
+              className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none text-[#081B38]"
             />
           </div>
 
@@ -289,7 +490,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             className="h-11 px-6 bg-[#000412] hover:bg-[#0F1E36] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all cursor-pointer"
           >
             <Save size={15} />
-            <span>Save Configuration</span>
+            <span>Save Active Site Configuration</span>
           </button>
         </div>
       </form>
@@ -328,30 +529,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#FFFBEB] border border-[#FDE68A]">
           <div>
-            <h3 className="text-sm font-bold text-[#B45309]">Reset to Initial Finishing Demo Data</h3>
-            <p className="text-xs text-[#92400E]">Restores realistic finishing site data (tiles, screeding, POP, haulage) to Firestore.</p>
+            <h3 className="text-sm font-bold text-[#B45309]">Load Demo & Benchmark Finishing Dataset</h3>
+            <p className="text-xs text-[#92400E]">Populates realistic sample data (tiles, screeding, POP, haulage) into this site workspace.</p>
           </div>
           <button
             onClick={() => {
-              if (confirm('Are you sure you want to reset to the default demo data in Firestore? All custom entries will be replaced.')) {
+              if (confirm('Load sample demo data into this project? Any existing records with matching IDs will be overwritten.')) {
                 onResetSeedData();
               }
             }}
             className="h-10 px-4 bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
           >
             <RotateCcw size={15} />
-            <span>Reset Demo Data</span>
+            <span>Load Demo Data</span>
           </button>
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#FFDAD6]/40 border border-[#FFDAD6]">
           <div>
             <h3 className="text-sm font-bold text-[#BA1A1A]">Clear All Site Transactions</h3>
-            <p className="text-xs text-[#75777E]">Wipes all logs in Firestore to start clean for a brand new real estate project.</p>
+            <p className="text-xs text-[#75777E]">Wipes all logs in this project to start clean for a brand new real estate development.</p>
           </div>
           <button
             onClick={() => {
-              if (confirm('Are you sure you want to wipe all transaction records in Firestore? This cannot be undone.')) {
+              if (confirm('Are you sure you want to wipe all transaction records in this project? This cannot be undone.')) {
                 onClearAllData();
               }
             }}
@@ -363,12 +564,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Phase 13: Historical Audit Trail Card */}
+      {/* Historical Audit Trail Card */}
       <div className="bg-white rounded-2xl border border-[#E8EDFF] p-6 shadow-xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-[#E8EDFF]">
           <div>
             <h2 className="text-sm font-bold text-[#081B38] uppercase tracking-wider flex items-center gap-2">
-              <Activity size={16} className="text-[#6B46C1]" />
+              <Activity size={16} className="text-[#0F1E36]" />
               Site Change Audit Trail
             </h2>
             <p className="text-xs text-[#75777E] mt-0.5">
@@ -407,7 +608,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <td className="p-3 font-medium text-[#081B38] whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <User size={12} className="text-[#75777E]" />
-                        <span>{evt.user || 'Engineer'}</span>
+                        <span>{evt.userEmail || evt.user || 'Engineer'}</span>
                       </div>
                     </td>
                     <td className="p-3">
@@ -425,8 +626,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         {evt.action}
                       </span>
                     </td>
-                    <td className="p-3 font-semibold text-[#081B38]">{evt.entity}</td>
-                    <td className="p-3 text-[#44474D] max-w-md truncate">{evt.summary}</td>
+                    <td className="p-3 font-semibold text-[#081B38]">{evt.entityType || evt.entity}</td>
+                    <td className="p-3 text-[#44474D] max-w-md truncate">{evt.details || evt.summary}</td>
                   </tr>
                 ))
               )}

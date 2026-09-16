@@ -37,6 +37,8 @@ export function useTrackerData() {
   }, []);
 
   const project: ProjectSettings = ConstructionTrackerService.getProject();
+  const projects: ProjectSettings[] = ConstructionTrackerService.getProjects();
+  const activeProjectId: string = ConstructionTrackerService.getActiveProjectId();
   const materials: Material[] = ConstructionTrackerService.getMaterials();
   const purchases: PurchaseRecord[] = ConstructionTrackerService.getPurchases();
   const usage: MaterialUsage[] = ConstructionTrackerService.getMaterialUsage();
@@ -48,6 +50,9 @@ export function useTrackerData() {
   const metrics: AggregatedMetrics = ConstructionTrackerService.getAggregatedMetrics();
   const auditEvents: AuditEvent[] = ConstructionTrackerService.getAuditEvents();
   const currentUser = ConstructionTrackerService.getCurrentUser();
+  const userProfile = ConstructionTrackerService.getUserProfile();
+  const syncStatus = ConstructionTrackerService.getSyncStatus();
+  const lastError = ConstructionTrackerService.getLastError();
 
   const refresh = useCallback(() => {
     setDataVersion((v) => v + 1);
@@ -57,6 +62,8 @@ export function useTrackerData() {
     dataVersion,
     refresh,
     project,
+    projects,
+    activeProjectId,
     materials,
     purchases,
     usage,
@@ -69,6 +76,13 @@ export function useTrackerData() {
     metrics,
     auditEvents,
     currentUser,
+    userProfile,
+    syncStatus,
+    lastError,
+    clearError: ConstructionTrackerService.clearError.bind(ConstructionTrackerService),
+    switchProject: ConstructionTrackerService.switchProject.bind(ConstructionTrackerService),
+    createProject: ConstructionTrackerService.createProject.bind(ConstructionTrackerService),
+    deleteProject: ConstructionTrackerService.deleteProject.bind(ConstructionTrackerService),
     loading: false,
     // Service helpers
     saveMaterial: ConstructionTrackerService.saveMaterial.bind(ConstructionTrackerService),
