@@ -38,6 +38,7 @@ export const LabourView: React.FC<LabourViewProps> = ({
   const totalAgreed = contractors.reduce((sum, c) => sum + c.agreedAmount, 0);
   const totalPaid = contractors.reduce((sum, c) => sum + c.totalPaid, 0);
   const totalOutstanding = contractors.reduce((sum, c) => sum + c.outstandingBalance, 0);
+  const totalOverpaid = contractors.reduce((sum, c) => sum + (c.overpayment || 0), 0);
 
   const toggleExpand = (id: string) => {
     setExpandedContractorId(expandedContractorId === id ? null : id);
@@ -84,7 +85,7 @@ export const LabourView: React.FC<LabourViewProps> = ({
       </div>
 
       {/* KPI Cards (Stitch Design) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 ${totalOverpaid > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-4`}>
         <div className="bg-white p-4 rounded-2xl border border-[#E8EDFF] shadow-xs">
           <span className="text-[11px] font-bold text-[#75777E] uppercase tracking-wider block">
             Agreed Contracts Sum
@@ -120,6 +121,20 @@ export const LabourView: React.FC<LabourViewProps> = ({
             Pending final milestone certification
           </span>
         </div>
+
+        {totalOverpaid > 0 && (
+          <div className="bg-white p-4 rounded-2xl border border-[#BBF7D0] shadow-xs bg-[#F0FDF4]">
+            <span className="text-[11px] font-bold text-[#15803D] uppercase tracking-wider block">
+              Recorded Overpayment
+            </span>
+            <span className="font-mono text-xl sm:text-2xl font-black text-[#15803D] mt-1 block">
+              +{formatNaira(totalOverpaid)}
+            </span>
+            <span className="text-xs text-[#15803D] font-medium mt-1 block">
+              Cumulative excess disbursements
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Sub-tabs: Contractor Cards vs All Disbursements History */}

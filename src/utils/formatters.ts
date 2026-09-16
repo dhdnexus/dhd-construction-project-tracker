@@ -102,6 +102,12 @@ export function formatRelativeTime(dateString: string | null | undefined): strin
   }
 }
 
+export function escapeCSV(val: any): string {
+  if (val === null || val === undefined) return '""';
+  const str = String(val).replace(/"/g, '""');
+  return `"${str}"`;
+}
+
 /**
  * Validates purchase calculations with integer kobo precision:
  * Quantity: 12
@@ -130,20 +136,32 @@ export function calculatePurchaseTotals(
 
   const unitPriceKobo = toKobo(safePrice);
   const materialCostKobo = Math.round(safeQty * unitPriceKobo);
-  const haulageKobo = toKobo(safeHaulage);
-  const offloadKobo = toKobo(safeOffload);
-  const otherKobo = toKobo(safeOther);
-  const paidKobo = toKobo(safePaid);
+  const haulageCostKobo = toKobo(safeHaulage);
+  const offloadingCostKobo = toKobo(safeOffload);
+  const otherCostKobo = toKobo(safeOther);
+  const amountPaidKobo = toKobo(safePaid);
 
-  const acquisitionCostKobo = materialCostKobo + haulageKobo + offloadKobo + otherKobo;
-  const balanceKobo = acquisitionCostKobo - paidKobo;
+  const acquisitionCostKobo = materialCostKobo + haulageCostKobo + offloadingCostKobo + otherCostKobo;
+  const balanceKobo = acquisitionCostKobo - amountPaidKobo;
+
+  const supplierBalanceKobo = Math.max(0, balanceKobo);
+  const supplierOverpaymentKobo = Math.max(0, -balanceKobo);
 
   const materialCost = fromKobo(materialCostKobo);
   const acquisitionCost = fromKobo(acquisitionCostKobo);
-  const supplierBalance = balanceKobo > 0 ? fromKobo(balanceKobo) : 0;
-  const supplierOverpayment = balanceKobo < 0 ? fromKobo(Math.abs(balanceKobo)) : 0;
+  const supplierBalance = fromKobo(supplierBalanceKobo);
+  const supplierOverpayment = fromKobo(supplierOverpaymentKobo);
 
   return {
+    unitPriceKobo,
+    materialCostKobo,
+    haulageCostKobo,
+    offloadingCostKobo,
+    otherCostKobo,
+    acquisitionCostKobo,
+    amountPaidKobo,
+    supplierBalanceKobo,
+    supplierOverpaymentKobo,
     materialCost,
     acquisitionCost,
     supplierBalance,
@@ -158,12 +176,19 @@ export function calculatePurchaseTotals(
  * Paid: 1,100,000 -> Outstanding: 0, Overpayment: 100,000
  */
 export function calculateLabourBalances(agreedAmount: number, totalPaid: number) {
-  const agreedKobo = toKobo(Math.max(0, agreedAmount));
-  const paidKobo = toKobo(Math.max(0, totalPaid));
-  const diffKobo = agreedKobo - paidKobo;
+  const agreedAmountKobo = toKobo(Math.max(0, agreedAmount));
+  const totalPaidKobo = toKobo(Math.max(0, totalPaid));
+  const diffKobo = agreedAmountKobo - totalPaidKobo;
+
+  const outstandingBalanceKobo = Math.max(0, diffKobo);
+  const overpaymentKobo = Math.max(0, -diffKobo);
 
   return {
-    outstandingBalance: diffKobo > 0 ? fromKobo(diffKobo) : 0,
-    overpayment: diffKobo < 0 ? fromKobo(Math.abs(diffKobo)) : 0,
+    agreedAmountKobo,
+    totalPaidKobo,
+    outstandingBalanceKobo,
+    overpaymentKobo,
+    outstandingBalance: fromKobo(outstandingBalanceKobo),
+    overpayment: fromKobo(overpaymentKobo),
   };
 }

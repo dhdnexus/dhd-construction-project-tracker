@@ -35,12 +35,15 @@ export interface ProjectSettings {
   stage: string;
   handoverDate: string;
   budgetCap: number; // in Naira (e.g. 27000000)
+  budgetCapKobo?: number; // integer kobo (e.g. 2700000000)
   activeArtisans: number;
   location: string;
   currencySymbol: string;
   timezone: string;
   siteAddress?: string;
   projectManager?: string;
+  clientName?: string;
+  appTitle?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -55,8 +58,10 @@ export interface Material {
   totalPurchased: number;
   totalUsed: number;
   remaining: number; // totalPurchased - totalUsed (always >= 0)
-  avgUnitPrice: number; // weighted average unit price
+  avgUnitPrice: number; // weighted average unit price in Naira
+  avgUnitPriceKobo?: number; // weighted average unit price in kobo
   totalCost: number; // total acquisition cost spent on this material
+  totalCostKobo?: number;
   supplier: string;
   lotNumber?: string;
   image?: string;
@@ -75,14 +80,23 @@ export interface PurchaseRecord {
   quantity: number;
   unit: string;
   unitPrice: number;
+  unitPriceKobo?: number;
   materialCost: number; // quantity * unitPrice
+  materialCostKobo?: number;
   haulageCost: number;
+  haulageCostKobo?: number;
   offloadingCost: number;
+  offloadingCostKobo?: number;
   otherCost: number;
-  acquisitionCost: number; // materialCost + haulageCost + offloadingCost + otherCost (Landed Acquisition Cost)
+  otherCostKobo?: number;
+  acquisitionCost: number; // Landed Acquisition Cost
+  acquisitionCostKobo?: number;
   amountPaid: number; // Cash paid to supplier
-  supplierBalance: number; // acquisitionCost - amountPaid (clamped to 0 if paid in full or overpaid)
-  supplierOverpayment?: number; // amountPaid - acquisitionCost if amountPaid > acquisitionCost
+  amountPaidKobo?: number;
+  supplierBalance: number; // Outstanding liability
+  supplierBalanceKobo?: number;
+  supplierOverpayment?: number;
+  supplierOverpaymentKobo?: number;
   supplier: string;
   purchaseDate: string;
   transportRecordId?: string; // Explicit link to separate transport record if exists
@@ -136,10 +150,14 @@ export interface Contractor {
   name: string;
   trade: string; // e.g. "Tiling", "POP Plaster", "Plumbing"
   workDescription: string;
-  agreedAmount: number; // Contractual obligation
-  totalPaid: number; // Total payments logged
+  agreedAmount: number; // Contractual obligation in Naira
+  agreedAmountKobo?: number;
+  totalPaid: number; // Total payments logged in Naira
+  totalPaidKobo?: number;
   outstandingBalance: number; // max(0, agreedAmount - totalPaid)
+  outstandingBalanceKobo?: number;
   overpayment?: number; // max(0, totalPaid - agreedAmount) if paid > agreed
+  overpaymentKobo?: number;
   avatar?: string;
   isVerified: boolean;
   notes?: string;
@@ -155,6 +173,7 @@ export interface LabourPayment {
   contractorName: string;
   trade: string;
   amount: number; // Payment in Naira
+  amountKobo?: number;
   milestoneTitle: string; // e.g. "1st Tranche - Screeding & Layout"
   paymentMethod: PaymentMethod;
   paymentDate: string;
@@ -175,6 +194,7 @@ export interface TransportationRecord {
   to: string;
   transporter: string;
   cost: number;
+  costKobo?: number;
   waybillRef?: string;
   notes?: string;
   createdAt: string;
@@ -187,6 +207,7 @@ export interface OtherExpenseRecord {
   category: ExpenseCategory;
   description: string;
   amount: number;
+  amountKobo?: number;
   date: string;
   paidBy: string;
   receiptRef?: string;

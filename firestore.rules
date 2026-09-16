@@ -2,51 +2,124 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function isAuthenticated() {
-      return request.auth != null;
-    }
-    function isDocOwner() {
-      return isAuthenticated() && (
-        resource == null || resource.data.ownerId == request.auth.uid
-      );
-    }
-    function isNewDocOwner() {
-      return isAuthenticated() && (
-        request.resource == null || request.resource.data.ownerId == request.auth.uid
-      );
+      return request.auth != null && request.auth.uid != null;
     }
 
+    function isExistingDocOwner() {
+      return isAuthenticated() && resource != null && resource.data.ownerId == request.auth.uid;
+    }
+
+    function isCreatingWithOwner() {
+      return isAuthenticated() &&
+        request.resource != null &&
+        request.resource.data.ownerId == request.auth.uid;
+    }
+
+    function isOwnerImmutable() {
+      return resource == null ||
+        request.resource == null ||
+        !('ownerId' in resource.data) ||
+        resource.data.ownerId == request.resource.data.ownerId;
+    }
+
+    function isProjectImmutable() {
+      return resource == null ||
+        request.resource == null ||
+        !('projectId' in resource.data) ||
+        resource.data.projectId == request.resource.data.projectId;
+    }
+
+    // 1. Projects
     match /projects/{projectId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner();
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 2. Materials
     match /materials/{materialId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 3. Purchases
     match /purchases/{purchaseId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 4. Material Usage
     match /materialUsage/{usageId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 5. Contractors
     match /contractors/{contractorId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 6. Labour Payments
     match /labourPayments/{paymentId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 7. Transportation & Haulage
     match /transportation/{transportId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 8. Other Site Expenses
     match /otherExpenses/{expenseId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 9. Work Progress Milestones
     match /workProgress/{progressId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 10. Category Budgets
     match /categoryBudgets/{budgetId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow delete: if isExistingDocOwner();
     }
+
+    // 11. Audit Events
     match /auditEvents/{eventId} {
-      allow read, write: if isAuthenticated() && isDocOwner() && isNewDocOwner();
+      allow read: if isExistingDocOwner();
+      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string;
+      allow update: if false; // Audit logs are append-only
+      allow delete: if isExistingDocOwner();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

@@ -11,6 +11,7 @@ import {
   Layers,
   ArrowRight,
 } from 'lucide-react';
+import { AppLogo } from '../components/common/AppLogo';
 import {
   ProjectSettings,
   PurchaseRecord,
@@ -22,7 +23,7 @@ import {
   OtherExpenseRecord,
   BudgetCostItem,
 } from '../types';
-import { formatNaira, formatDate } from '../utils/formatters';
+import { formatNaira, formatDate, escapeCSV } from '../utils/formatters';
 
 interface ReportsViewProps {
   project: ProjectSettings;
@@ -69,45 +70,182 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   };
 
   const handleExportCSV = () => {
-    let csvContent = 'data:text/csv;charset=utf-8,\uFEFF';
+    const rows: string[] = [];
 
     if (reportType === 'materials') {
-      csvContent += 'Purchase Date,Material Name,Category,Supplier,Quantity,Unit,Unit Price,Acquisition Cost,Amount Paid,Supplier Balance,Waybill\r\n';
+      rows.push(
+        [
+          'Purchase Date',
+          'Material Name',
+          'Category',
+          'Supplier',
+          'Quantity',
+          'Unit',
+          'Unit Price (NGN)',
+          'Material Cost (NGN)',
+          'Haulage (NGN)',
+          'Offloading (NGN)',
+          'Landed Acquisition Cost (NGN)',
+          'Amount Paid (NGN)',
+          'Supplier Balance (NGN)',
+          'Supplier Overpayment (NGN)',
+          'Waybill Ref',
+          'Notes',
+        ]
+          .map(escapeCSV)
+          .join(',')
+      );
+
       purchases.forEach((p) => {
-        csvContent += `"${p.purchaseDate}","${p.materialName}","${p.category}","${p.supplier}",${p.quantity},"${p.unit}",${p.unitPrice},${p.acquisitionCost},${p.amountPaid},${p.supplierBalance},"${p.waybillRef || ''}"\r\n`;
+        rows.push(
+          [
+            p.purchaseDate,
+            p.materialName,
+            p.category,
+            p.supplier,
+            p.quantity,
+            p.unit,
+            p.unitPrice,
+            p.materialCost,
+            p.haulageCost || 0,
+            p.offloadingCost || 0,
+            p.acquisitionCost,
+            p.amountPaid || 0,
+            p.supplierBalance || 0,
+            p.supplierOverpayment || 0,
+            p.waybillRef || '',
+            p.notes || '',
+          ]
+            .map(escapeCSV)
+            .join(',')
+        );
       });
     } else if (reportType === 'labour') {
-      csvContent += 'Payment Date,Contractor Name,Trade,Milestone,Amount,Payment Method,Receipt Ref,Notes\r\n';
+      rows.push(
+        [
+          'Payment Date',
+          'Contractor Name',
+          'Trade',
+          'Milestone',
+          'Amount Paid (NGN)',
+          'Payment Method',
+          'Receipt Ref',
+          'Notes',
+        ]
+          .map(escapeCSV)
+          .join(',')
+      );
+
       labourPayments.forEach((l) => {
-        csvContent += `"${l.paymentDate}","${l.contractorName}","${l.trade}","${l.milestoneTitle}",${l.amount},"${l.paymentMethod}","${l.receiptRef || ''}","${l.notes || ''}"\r\n`;
+        rows.push(
+          [
+            l.paymentDate,
+            l.contractorName,
+            l.trade,
+            l.milestoneTitle,
+            l.amount,
+            l.paymentMethod,
+            l.receiptRef || '',
+            l.notes || '',
+          ]
+            .map(escapeCSV)
+            .join(',')
+        );
       });
     } else {
       // Master Ledger CSV
-      csvContent += 'Type,Date,Description/Item,Category/Trade,Entity/Vendor,Amount (NGN),Status/Notes\r\n';
+      rows.push(
+        [
+          'Type',
+          'Date',
+          'Description / Item',
+          'Category / Trade',
+          'Entity / Vendor',
+          'Amount (NGN)',
+          'Status / Details',
+        ]
+          .map(escapeCSV)
+          .join(',')
+      );
+
       purchases.forEach((p) => {
-        csvContent += `"Material Purchase","${p.purchaseDate}","${p.materialName}","${p.category}","${p.supplier}",${p.acquisitionCost},"Bal: ${p.supplierBalance}"\r\n`;
+        rows.push(
+          [
+            'Material Purchase',
+            p.purchaseDate,
+            p.materialName,
+            p.category,
+            p.supplier,
+            p.acquisitionCost,
+            `Paid: ₦${(p.amountPaid || 0).toLocaleString()} | Balance: ₦${(p.supplierBalance || 0).toLocaleString()}`,
+          ]
+            .map(escapeCSV)
+            .join(',')
+        );
       });
+
       labourPayments.forEach((l) => {
-        csvContent += `"Labour Disbursement","${l.paymentDate}","${l.milestoneTitle}","${l.trade}","${l.contractorName}",${l.amount},"${l.paymentMethod}"\r\n`;
+        rows.push(
+          [
+            'Labour Disbursement',
+            l.paymentDate,
+            l.milestoneTitle,
+            l.trade,
+            l.contractorName,
+            l.amount,
+            `Method: ${l.paymentMethod}${l.receiptRef ? ` | Ref: ${l.receiptRef}` : ''}`,
+          ]
+            .map(escapeCSV)
+            .join(',')
+        );
       });
+
       transportation.forEach((t) => {
-        csvContent += `"Haulage","${t.date}","${t.itemTransported}","Haulage","${t.transporter}",${t.cost},"${t.from} -> ${t.to}"\r\n`;
+        rows.push(
+          [
+            'Haulage Logistics',
+            t.date,
+            t.itemTransported,
+            'Transportation',
+            t.transporter,
+            t.cost,
+            `${t.from} -> ${t.to}${t.purchaseId ? ' [Linked to Purchase]' : ''}`,
+          ]
+            .map(escapeCSV)
+            .join(',')
+        );
       });
+
       expenses.forEach((e) => {
-        csvContent += `"Site Expense","${e.date}","${e.description}","${e.category}","${e.paidBy}",${e.amount},"${e.receiptRef || ''}"\r\n`;
+        rows.push(
+          [
+            'Site Expense',
+            e.date,
+            e.description,
+            e.category,
+            e.paidBy,
+            e.amount,
+            e.receiptRef || '',
+          ]
+            .map(escapeCSV)
+            .join(',')
+        );
       });
     }
 
-    const encodedUri = encodeURI(csvContent);
+    const csvString = '\uFEFF' + rows.join('\r\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.href = url;
     link.setAttribute(
       'download',
-      `DHD_Report_${reportType}_${new Date().toISOString().split('T')[0]}.csv`
+      `Construction_Report_${reportType}_${new Date().toISOString().split('T')[0]}.csv`
     );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -178,9 +316,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
         <div className="border-b border-[#081B38] pb-6 mb-6 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2.5 mb-1">
-              <div className="w-8 h-8 rounded-lg bg-[#000412] text-white flex items-center justify-center font-black text-sm">
-                DHD
-              </div>
+              <AppLogo size={28} />
               <span className="font-mono text-xs font-bold text-[#6B46C1] uppercase tracking-wider">
                 Construction Project Tracker
               </span>
@@ -456,7 +592,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
             Certified correct by Project Manager & Site Architect.
           </div>
           <div className="font-mono">
-            Page 1 of 1 • DHD Construction Management Platform
+            Page 1 of 1 • Construction Project Management Platform
           </div>
         </div>
       </div>

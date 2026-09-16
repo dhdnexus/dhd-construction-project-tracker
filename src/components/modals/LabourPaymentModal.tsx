@@ -241,11 +241,17 @@ export const LabourPaymentModal: React.FC<LabourPaymentModalProps> = ({
           {/* Live Post-Payment Preview */}
           <div className="p-3 bg-[#0F1E36] text-white rounded-xl flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
-              <CreditCard size={16} className="text-[#F59E0B]" />
-              <span className="text-[#C5C6CE]">Balance After Release:</span>
+              <CreditCard size={16} className={numAmount > currentOutstanding ? 'text-[#34D399]' : 'text-[#F59E0B]'} />
+              <span className="text-[#C5C6CE]">
+                {numAmount > currentOutstanding ? 'Recorded as Overpayment:' : 'Balance After Release:'}
+              </span>
             </div>
-            <div className="font-mono font-bold text-[#F59E0B] text-sm">
-              {formatNaira(remainingAfterPayment)}
+            <div className="font-mono font-bold text-sm">
+              {numAmount > currentOutstanding ? (
+                <span className="text-[#34D399]">+{formatNaira(numAmount - currentOutstanding)}</span>
+              ) : (
+                <span className="text-[#F59E0B]">{formatNaira(remainingAfterPayment)}</span>
+              )}
             </div>
           </div>
 
