@@ -36,7 +36,7 @@ import {
   WorkProgressItem,
   Contractor,
 } from './types';
-import { Check, AlertCircle } from 'lucide-react';
+import { Check, AlertCircle, Building, Plus } from 'lucide-react';
 import { formatNairaCompact } from './utils/formatters';
 
 export default function App() {
@@ -257,32 +257,68 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto pb-28 md:pb-12 min-w-0">
-          {activeTab === 'dashboard' && (
-            <DashboardView
-              project={project}
-              metrics={metrics}
-              purchases={purchases}
-              usage={usage}
-              workProgress={workProgress}
-              contractors={contractors}
-              labourPayments={labourPayments}
-              onNavigate={handleNavigate}
-              onOpenPurchaseModal={() => {
-                setSelectedPurchase(null);
-                setPurchaseModalOpen(true);
-              }}
-              onOpenUsageModal={() => {
-                setSelectedUsage(null);
-                setDefaultUsageMaterialId(undefined);
-                setUsageModalOpen(true);
-              }}
-              onOpenPaymentModal={() => {
-                setSelectedPayment(null);
-                setDefaultPaymentContractorId(undefined);
-                setPaymentModalOpen(true);
-              }}
-            />
-          )}
+          {projects.length === 0 && activeTab !== 'settings' ? (
+            <div className="flex items-center justify-center min-h-[60vh] py-8">
+              <div className="max-w-md w-full bg-white rounded-3xl border border-[#E8EDFF] p-8 text-center shadow-xs">
+                <div className="w-16 h-16 rounded-2xl bg-[#F1F3FF] text-[#081B38] mx-auto flex items-center justify-center mb-5">
+                  <Building size={32} />
+                </div>
+                <h2 className="text-xl font-bold text-[#081B38] tracking-tight mb-2">
+                  No Active Project Workspace
+                </h2>
+                <p className="text-sm text-[#75777E] leading-relaxed mb-6">
+                  Create your first construction project workspace to start tracking materials, labor disbursements, and landed expenses without demo pollution.
+                </p>
+                <div className="flex flex-col gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setProjectModalOpen(true)}
+                    className="w-full py-3 px-5 bg-[#000412] hover:bg-[#0F1E36] text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    <Plus size={16} />
+                    <span>Create Your First Project</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetToSeedData();
+                      showToast('Sample demo project initialized.');
+                    }}
+                    className="w-full py-2.5 px-4 bg-[#F1F3FF] hover:bg-[#E0E8FF] text-[#081B38] text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                  >
+                    Load Sample Demo Project
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {activeTab === 'dashboard' && (
+                <DashboardView
+                  project={project}
+                  metrics={metrics}
+                  purchases={purchases}
+                  usage={usage}
+                  workProgress={workProgress}
+                  contractors={contractors}
+                  labourPayments={labourPayments}
+                  onNavigate={handleNavigate}
+                  onOpenPurchaseModal={() => {
+                    setSelectedPurchase(null);
+                    setPurchaseModalOpen(true);
+                  }}
+                  onOpenUsageModal={() => {
+                    setSelectedUsage(null);
+                    setDefaultUsageMaterialId(undefined);
+                    setUsageModalOpen(true);
+                  }}
+                  onOpenPaymentModal={() => {
+                    setSelectedPayment(null);
+                    setDefaultPaymentContractorId(undefined);
+                    setPaymentModalOpen(true);
+                  }}
+                />
+              )}
 
           {activeTab === 'materials' && (
             <MaterialsView
@@ -523,6 +559,8 @@ export default function App() {
               onOpenAuthModal={() => setAuthModalOpen(true)}
             />
           )}
+          </>
+        )}
         </main>
       </div>
 

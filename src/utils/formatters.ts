@@ -127,45 +127,63 @@ export function calculatePurchaseTotals(
   other: number = 0,
   amountPaid: number = 0
 ) {
+  const unitPriceKobo = toKobo(Math.max(0, unitPrice));
+  const haulageCostKobo = toKobo(Math.max(0, haulage));
+  const offloadingCostKobo = toKobo(Math.max(0, offloading));
+  const otherCostKobo = toKobo(Math.max(0, other));
+  const amountPaidKobo = toKobo(Math.max(0, amountPaid));
+
+  return calculatePurchaseTotalsFromKobo(
+    quantity,
+    unitPriceKobo,
+    haulageCostKobo,
+    offloadingCostKobo,
+    otherCostKobo,
+    amountPaidKobo
+  );
+}
+
+export function calculatePurchaseTotalsFromKobo(
+  quantity: number,
+  unitPriceKobo: number,
+  haulageCostKobo: number = 0,
+  offloadingCostKobo: number = 0,
+  otherCostKobo: number = 0,
+  amountPaidKobo: number = 0
+) {
   const safeQty = Math.max(0, quantity);
-  const safePrice = Math.max(0, unitPrice);
-  const safeHaulage = Math.max(0, haulage);
-  const safeOffload = Math.max(0, offloading);
-  const safeOther = Math.max(0, other);
-  const safePaid = Math.max(0, amountPaid);
+  const safeUnitPriceKobo = Math.max(0, Math.round(unitPriceKobo));
+  const safeHaulageKobo = Math.max(0, Math.round(haulageCostKobo));
+  const safeOffloadKobo = Math.max(0, Math.round(offloadingCostKobo));
+  const safeOtherKobo = Math.max(0, Math.round(otherCostKobo));
+  const safePaidKobo = Math.max(0, Math.round(amountPaidKobo));
 
-  const unitPriceKobo = toKobo(safePrice);
-  const materialCostKobo = Math.round(safeQty * unitPriceKobo);
-  const haulageCostKobo = toKobo(safeHaulage);
-  const offloadingCostKobo = toKobo(safeOffload);
-  const otherCostKobo = toKobo(safeOther);
-  const amountPaidKobo = toKobo(safePaid);
-
-  const acquisitionCostKobo = materialCostKobo + haulageCostKobo + offloadingCostKobo + otherCostKobo;
-  const balanceKobo = acquisitionCostKobo - amountPaidKobo;
+  const materialCostKobo = Math.round(safeQty * safeUnitPriceKobo);
+  const acquisitionCostKobo = safeHaulageKobo + safeOffloadKobo + safeOtherKobo + materialCostKobo;
+  const balanceKobo = acquisitionCostKobo - safePaidKobo;
 
   const supplierBalanceKobo = Math.max(0, balanceKobo);
   const supplierOverpaymentKobo = Math.max(0, -balanceKobo);
 
-  const materialCost = fromKobo(materialCostKobo);
-  const acquisitionCost = fromKobo(acquisitionCostKobo);
-  const supplierBalance = fromKobo(supplierBalanceKobo);
-  const supplierOverpayment = fromKobo(supplierOverpaymentKobo);
-
   return {
-    unitPriceKobo,
+    unitPriceKobo: safeUnitPriceKobo,
     materialCostKobo,
-    haulageCostKobo,
-    offloadingCostKobo,
-    otherCostKobo,
+    haulageCostKobo: safeHaulageKobo,
+    offloadingCostKobo: safeOffloadKobo,
+    otherCostKobo: safeOtherKobo,
     acquisitionCostKobo,
-    amountPaidKobo,
+    amountPaidKobo: safePaidKobo,
     supplierBalanceKobo,
     supplierOverpaymentKobo,
-    materialCost,
-    acquisitionCost,
-    supplierBalance,
-    supplierOverpayment,
+    unitPrice: fromKobo(safeUnitPriceKobo),
+    materialCost: fromKobo(materialCostKobo),
+    haulageCost: fromKobo(safeHaulageKobo),
+    offloadingCost: fromKobo(safeOffloadKobo),
+    otherCost: fromKobo(safeOtherKobo),
+    acquisitionCost: fromKobo(acquisitionCostKobo),
+    amountPaid: fromKobo(safePaidKobo),
+    supplierBalance: fromKobo(supplierBalanceKobo),
+    supplierOverpayment: fromKobo(supplierOverpaymentKobo),
   };
 }
 
@@ -178,17 +196,33 @@ export function calculatePurchaseTotals(
 export function calculateLabourBalances(agreedAmount: number, totalPaid: number) {
   const agreedAmountKobo = toKobo(Math.max(0, agreedAmount));
   const totalPaidKobo = toKobo(Math.max(0, totalPaid));
-  const diffKobo = agreedAmountKobo - totalPaidKobo;
+  return calculateLabourBalancesFromKobo(agreedAmountKobo, totalPaidKobo);
+}
+
+export function calculateLabourBalancesFromKobo(agreedAmountKobo: number, totalPaidKobo: number) {
+  const safeAgreedKobo = Math.max(0, Math.round(agreedAmountKobo));
+  const safePaidKobo = Math.max(0, Math.round(totalPaidKobo));
+  const diffKobo = safeAgreedKobo - safePaidKobo;
 
   const outstandingBalanceKobo = Math.max(0, diffKobo);
   const overpaymentKobo = Math.max(0, -diffKobo);
 
   return {
-    agreedAmountKobo,
-    totalPaidKobo,
+    agreedAmountKobo: safeAgreedKobo,
+    totalPaidKobo: safePaidKobo,
     outstandingBalanceKobo,
     overpaymentKobo,
+    agreedAmount: fromKobo(safeAgreedKobo),
+    totalPaid: fromKobo(safePaidKobo),
     outstandingBalance: fromKobo(outstandingBalanceKobo),
     overpayment: fromKobo(overpaymentKobo),
   };
+}
+
+export function formatKobo(kobo: number | null | undefined, showDecimals: boolean = false): string {
+  return formatNaira(fromKobo(kobo ?? 0), showDecimals);
+}
+
+export function formatKoboCompact(kobo: number | null | undefined): string {
+  return formatNairaCompact(fromKobo(kobo ?? 0));
 }

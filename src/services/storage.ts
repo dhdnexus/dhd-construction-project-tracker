@@ -50,7 +50,9 @@ import {
 } from '../data/seedData';
 import {
   calculatePurchaseTotals,
+  calculatePurchaseTotalsFromKobo,
   calculateLabourBalances,
+  calculateLabourBalancesFromKobo,
   toKobo,
   fromKobo,
 } from '../utils/formatters';
@@ -74,6 +76,8 @@ const CACHE_KEYS = {
   AUDIT_EVENTS: 'cpt_cache_audit_events',
 };
 
+const EXPLICIT_LOGOUT_KEY = 'cpt_explicit_logout';
+
 function readLocalCache<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
   try {
@@ -95,9 +99,30 @@ function writeLocalCache<T>(key: string, value: T): void {
   }
 }
 
+const EMPTY_PROJECT_FALLBACK: ProjectSettings = {
+  id: '',
+  name: '',
+  code: '',
+  stage: '',
+  location: '',
+  siteAddress: '',
+  currencySymbol: '₦',
+  timezone: 'Africa/Lagos',
+  budgetCap: 0,
+  budgetCapKobo: 0,
+  startDate: '',
+  handoverDate: '',
+  status: 'Inactive',
+  currency: 'NGN',
+  projectManager: '',
+  activeArtisans: 0,
+};
+
 export class ConstructionTrackerService {
   private static currentUser: User | null = null;
   private static isInitialized = false;
+  private static explicitlyLoggedOut =
+    typeof sessionStorage !== 'undefined' && sessionStorage.getItem(EXPLICIT_LOGOUT_KEY) === 'true';
   private static unsubscribeListeners: (() => void)[] = [];
   private static subcollectionUnsubscribers: (() => void)[] = [];
 
@@ -106,19 +131,19 @@ export class ConstructionTrackerService {
   private static lastError: string | null = null;
 
   // Multi-project tracking
-  private static cachedProjects: ProjectSettings[] = readLocalCache(CACHE_KEYS.PROJECTS, [initialProject]);
-  private static activeProjectId: string = readLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, initialProject.id);
-  private static cachedProject: ProjectSettings = readLocalCache(CACHE_KEYS.PROJECT, initialProject);
+  private static cachedProjects: ProjectSettings[] = readLocalCache(CACHE_KEYS.PROJECTS, []);
+  private static activeProjectId: string = readLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, '');
+  private static cachedProject: ProjectSettings | null = readLocalCache(CACHE_KEYS.PROJECT, null);
 
   // In-memory data store for synchronous rendering
-  private static cachedMaterials: Material[] = readLocalCache(CACHE_KEYS.MATERIALS, initialMaterials);
-  private static cachedPurchases: PurchaseRecord[] = readLocalCache(CACHE_KEYS.PURCHASES, initialPurchases);
-  private static cachedUsage: MaterialUsage[] = readLocalCache(CACHE_KEYS.USAGE, initialUsage);
-  private static cachedWorkProgress: WorkProgressItem[] = readLocalCache(CACHE_KEYS.WORK_PROGRESS, initialWorkProgress);
-  private static cachedContractors: Contractor[] = readLocalCache(CACHE_KEYS.CONTRACTORS, initialContractors);
-  private static cachedLabourPayments: LabourPayment[] = readLocalCache(CACHE_KEYS.LABOUR_PAYMENTS, initialLabourPayments);
-  private static cachedTransportation: TransportationRecord[] = readLocalCache(CACHE_KEYS.TRANSPORTATION, initialTransportation);
-  private static cachedOtherExpenses: OtherExpenseRecord[] = readLocalCache(CACHE_KEYS.OTHER_EXPENSES, initialOtherExpenses);
+  private static cachedMaterials: Material[] = readLocalCache(CACHE_KEYS.MATERIALS, []);
+  private static cachedPurchases: PurchaseRecord[] = readLocalCache(CACHE_KEYS.PURCHASES, []);
+  private static cachedUsage: MaterialUsage[] = readLocalCache(CACHE_KEYS.USAGE, []);
+  private static cachedWorkProgress: WorkProgressItem[] = readLocalCache(CACHE_KEYS.WORK_PROGRESS, []);
+  private static cachedContractors: Contractor[] = readLocalCache(CACHE_KEYS.CONTRACTORS, []);
+  private static cachedLabourPayments: LabourPayment[] = readLocalCache(CACHE_KEYS.LABOUR_PAYMENTS, []);
+  private static cachedTransportation: TransportationRecord[] = readLocalCache(CACHE_KEYS.TRANSPORTATION, []);
+  private static cachedOtherExpenses: OtherExpenseRecord[] = readLocalCache(CACHE_KEYS.OTHER_EXPENSES, []);
   private static cachedCategoryBudgets: Record<string, number> = readLocalCache(CACHE_KEYS.CATEGORY_BUDGETS, {
     Materials: 15000000,
     Labour: 6500000,
@@ -138,7 +163,7 @@ export class ConstructionTrackerService {
   }
 
   public static getProjectId(): string {
-    return this.activeProjectId || this.cachedProject.id || 'proj_default';
+    return this.activeProjectId || this.cachedProject?.id || '';
   }
 
   public static getActiveProjectId(): string {
@@ -151,10 +176,10 @@ export class ConstructionTrackerService {
 
   public static getUserProfile(): UserProfile {
     return {
-      uid: this.currentUser?.uid || 'anon',
+      uid: this.currentUser?.uid || '',
       email: this.currentUser?.email || null,
       displayName: this.currentUser?.displayName || null,
-      isAnonymous: this.currentUser?.isAnonymous ?? true,
+      isAnonymous: this.currentUser?.isAnonymous ?? (this.currentUser === null ? false : true),
     };
   }
 
@@ -192,21 +217,71 @@ export class ConstructionTrackerService {
 
     onAuthStateChanged(auth, async (user) => {
       if (user) {
+        this.explicitlyLoggedOut = false;
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+        }
         this.currentUser = user;
         this.setupFirestoreSubscriptions(user.uid);
       } else {
-        try {
-          const cred = await signInAnonymously(auth);
-          this.currentUser = cred.user;
-          this.setupFirestoreSubscriptions(cred.user.uid);
-        } catch (err: any) {
-          console.warn('Anonymous sign-in fallback triggered:', err);
-          this.syncStatus = 'error';
-          this.lastError = err?.message || 'Failed to authenticate anonymously';
+        this.currentUser = null;
+        if (this.explicitlyLoggedOut) {
+          // User explicitly logged out: clean unauthenticated state, no anonymous re-login
+          this.clearActiveSessionData();
+          this.syncStatus = 'synced';
+          this.lastError = null;
+        } else {
+          // First-time guest visitor initialization
+          try {
+            const cred = await signInAnonymously(auth);
+            this.currentUser = cred.user;
+            this.setupFirestoreSubscriptions(cred.user.uid);
+          } catch (err: any) {
+            console.warn('Anonymous initialization fallback triggered:', err);
+            this.syncStatus = 'error';
+            this.lastError = err?.message || 'Failed to initialize session';
+          }
         }
       }
       this.notify();
     });
+  }
+
+  private static clearProjectData(): void {
+    this.subcollectionUnsubscribers.forEach((unsub) => unsub());
+    this.subcollectionUnsubscribers = [];
+
+    this.cachedProjects = [];
+    this.activeProjectId = '';
+    this.cachedProject = null;
+    this.cachedMaterials = [];
+    this.cachedPurchases = [];
+    this.cachedUsage = [];
+    this.cachedWorkProgress = [];
+    this.cachedContractors = [];
+    this.cachedLabourPayments = [];
+    this.cachedTransportation = [];
+    this.cachedOtherExpenses = [];
+
+    writeLocalCache(CACHE_KEYS.PROJECTS, []);
+    writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, '');
+    writeLocalCache(CACHE_KEYS.PROJECT, null);
+    writeLocalCache(CACHE_KEYS.MATERIALS, []);
+    writeLocalCache(CACHE_KEYS.PURCHASES, []);
+    writeLocalCache(CACHE_KEYS.USAGE, []);
+    writeLocalCache(CACHE_KEYS.WORK_PROGRESS, []);
+    writeLocalCache(CACHE_KEYS.CONTRACTORS, []);
+    writeLocalCache(CACHE_KEYS.LABOUR_PAYMENTS, []);
+    writeLocalCache(CACHE_KEYS.TRANSPORTATION, []);
+    writeLocalCache(CACHE_KEYS.OTHER_EXPENSES, []);
+  }
+
+  private static clearActiveSessionData(): void {
+    this.unsubscribeListeners.forEach((unsub) => unsub());
+    this.unsubscribeListeners = [];
+    this.clearProjectData();
+    this.cachedAuditEvents = [];
+    writeLocalCache(CACHE_KEYS.AUDIT_EVENTS, []);
   }
 
   /**
@@ -224,61 +299,53 @@ export class ConstructionTrackerService {
         projQ,
         async (snapshot) => {
           if (snapshot.empty) {
-            // New user without any projects in cloud: Create an initial clean project
-            const initialId = `proj_${ownerId.slice(0, 8)}`;
-            const cleanProject: ProjectSettings = {
-              id: initialId,
-              name: 'Finishing Project',
-              code: '#LK2-884',
-              stage: 'Finishing',
-              location: 'Lagos, Nigeria',
-              siteAddress: 'Lagos, Nigeria',
-              currencySymbol: '₦',
-              timezone: 'Africa/Lagos',
-              budgetCap: 27000000,
-              budgetCapKobo: toKobo(27000000),
-              startDate: new Date().toISOString().split('T')[0],
-              handoverDate: '2026-12-31',
-              status: 'Active',
-              currency: 'NGN',
-              projectManager: 'Site Engineer',
-              activeArtisans: 0,
-              ownerId,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-
-            try {
-              await setDoc(doc(db, 'projects', initialId), cleanProject);
-              this.cachedProjects = [cleanProject];
-              this.activeProjectId = initialId;
-              this.cachedProject = cleanProject;
-              writeLocalCache(CACHE_KEYS.PROJECTS, this.cachedProjects);
-              writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, initialId);
-              writeLocalCache(CACHE_KEYS.PROJECT, cleanProject);
-            } catch (err: any) {
-              console.warn('Could not auto-create initial project in Firestore:', err);
-            }
-          } else {
-            const projects: ProjectSettings[] = [];
-            snapshot.forEach((d) => projects.push(d.data() as ProjectSettings));
-            this.cachedProjects = projects;
-            writeLocalCache(CACHE_KEYS.PROJECTS, projects);
-
-            // Verify active project exists in user's projects
-            const currentActive = projects.find((p) => p.id === this.activeProjectId);
-            if (currentActive) {
-              this.cachedProject = currentActive;
-            } else if (projects.length > 0) {
-              this.activeProjectId = projects[0].id;
-              this.cachedProject = projects[0];
-              writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, this.activeProjectId);
-            }
-            writeLocalCache(CACHE_KEYS.PROJECT, this.cachedProject);
+            // New user with zero projects: Do NOT auto-seed hardcoded production project data.
+            // Provide clean empty-project state so user can explicitly create first project.
+            this.clearProjectData();
+            this.syncStatus = 'synced';
+            this.notify();
+            return;
           }
 
+          const projects: ProjectSettings[] = [];
+          snapshot.forEach((d) => {
+            const raw = d.data() as ProjectSettings;
+            const budgetCapKobo =
+              typeof raw.budgetCapKobo === 'number'
+                ? Math.round(raw.budgetCapKobo)
+                : toKobo(raw.budgetCap || 0);
+            projects.push({
+              ...raw,
+              budgetCapKobo,
+              budgetCap: fromKobo(budgetCapKobo),
+            });
+          });
+          this.cachedProjects = projects;
+          writeLocalCache(CACHE_KEYS.PROJECTS, projects);
+
+          // Verify active project exists in user's projects
+          const currentActive = projects.find((p) => p.id === this.activeProjectId);
+          if (currentActive) {
+            this.cachedProject = currentActive;
+          } else if (projects.length > 0) {
+            this.activeProjectId = projects[0].id;
+            this.cachedProject = projects[0];
+            writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, this.activeProjectId);
+          } else {
+            this.activeProjectId = '';
+            this.cachedProject = null;
+            writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, '');
+          }
+          writeLocalCache(CACHE_KEYS.PROJECT, this.cachedProject);
+
           // Now bind subcollections to the current active project
-          this.bindSubcollections(ownerId, this.activeProjectId);
+          if (this.activeProjectId) {
+            this.bindSubcollections(ownerId, this.activeProjectId);
+          } else {
+            this.subcollectionUnsubscribers.forEach((unsub) => unsub());
+            this.subcollectionUnsubscribers = [];
+          }
+          this.syncStatus = 'synced';
           this.notify();
         },
         (err) => {
@@ -326,9 +393,23 @@ export class ConstructionTrackerService {
     this.subcollectionUnsubscribers.forEach((unsub) => unsub());
     this.subcollectionUnsubscribers = [];
 
+    if (!projectId) {
+      this.cachedMaterials = [];
+      this.cachedPurchases = [];
+      this.cachedUsage = [];
+      this.cachedWorkProgress = [];
+      this.cachedContractors = [];
+      this.cachedLabourPayments = [];
+      this.cachedTransportation = [];
+      this.cachedOtherExpenses = [];
+      this.notify();
+      return;
+    }
+
     const bindProjectCollection = <T extends { id: string }>(
       colName: string,
       cacheKey: string,
+      transform: (raw: any) => T,
       setter: (items: T[]) => void
     ) => {
       try {
@@ -342,7 +423,7 @@ export class ConstructionTrackerService {
           (snapshot) => {
             const docs: T[] = [];
             snapshot.forEach((d) => {
-              docs.push(d.data() as T);
+              docs.push(transform(d.data()));
             });
             setter(docs);
             writeLocalCache(cacheKey, docs);
@@ -363,54 +444,197 @@ export class ConstructionTrackerService {
     };
 
     // Materials
-    bindProjectCollection<Material>('materials', CACHE_KEYS.MATERIALS, (items) => {
-      this.cachedMaterials = items;
-    });
+    bindProjectCollection<Material>(
+      'materials',
+      CACHE_KEYS.MATERIALS,
+      (raw: any) => {
+        const avgUnitPriceKobo =
+          typeof raw.avgUnitPriceKobo === 'number'
+            ? Math.round(raw.avgUnitPriceKobo)
+            : (typeof raw.unitPriceKobo === 'number' ? Math.round(raw.unitPriceKobo) : toKobo(raw.avgUnitPrice || 0));
+        const totalCostKobo =
+          typeof raw.totalCostKobo === 'number'
+            ? Math.round(raw.totalCostKobo)
+            : toKobo(raw.totalCost || 0);
+        return {
+          ...raw,
+          avgUnitPriceKobo,
+          unitPriceKobo: avgUnitPriceKobo,
+          totalCostKobo,
+          avgUnitPrice: fromKobo(avgUnitPriceKobo),
+          totalCost: fromKobo(totalCostKobo),
+        };
+      },
+      (items) => {
+        this.cachedMaterials = items;
+      }
+    );
 
     // Purchases
-    bindProjectCollection<PurchaseRecord>('purchases', CACHE_KEYS.PURCHASES, (items) => {
-      this.cachedPurchases = items.sort(
-        (a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
-      );
-    });
+    bindProjectCollection<PurchaseRecord>(
+      'purchases',
+      CACHE_KEYS.PURCHASES,
+      (raw: any) => {
+        const unitPriceKobo = typeof raw.unitPriceKobo === 'number' ? Math.round(raw.unitPriceKobo) : toKobo(raw.unitPrice || 0);
+        const haulageCostKobo = typeof raw.haulageCostKobo === 'number' ? Math.round(raw.haulageCostKobo) : toKobo(raw.haulageCost || 0);
+        const offloadingCostKobo = typeof raw.offloadingCostKobo === 'number' ? Math.round(raw.offloadingCostKobo) : toKobo(raw.offloadingCost || 0);
+        const otherCostKobo = typeof raw.otherCostKobo === 'number' ? Math.round(raw.otherCostKobo) : toKobo(raw.otherCost || 0);
+        const amountPaidKobo = typeof raw.amountPaidKobo === 'number' ? Math.round(raw.amountPaidKobo) : toKobo(raw.amountPaid || 0);
+
+        const calc = calculatePurchaseTotalsFromKobo(
+          raw.quantity || 0,
+          unitPriceKobo,
+          haulageCostKobo,
+          offloadingCostKobo,
+          otherCostKobo,
+          amountPaidKobo
+        );
+
+        return {
+          ...raw,
+          unitPriceKobo,
+          haulageCostKobo,
+          offloadingCostKobo,
+          otherCostKobo,
+          amountPaidKobo,
+          materialCostKobo: calc.materialCostKobo,
+          acquisitionCostKobo: calc.acquisitionCostKobo,
+          supplierBalanceKobo: calc.supplierBalanceKobo,
+          supplierOverpaymentKobo: calc.supplierOverpaymentKobo,
+          unitPrice: calc.unitPrice,
+          haulageCost: calc.haulageCost,
+          offloadingCost: calc.offloadingCost,
+          otherCost: calc.otherCost,
+          amountPaid: calc.amountPaid,
+          materialCost: calc.materialCost,
+          acquisitionCost: calc.acquisitionCost,
+          supplierBalance: calc.supplierBalance,
+          supplierOverpayment: calc.supplierOverpayment,
+        };
+      },
+      (items) => {
+        this.cachedPurchases = items.sort(
+          (a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime()
+        );
+      }
+    );
 
     // Material Usage
-    bindProjectCollection<MaterialUsage>('materialUsage', CACHE_KEYS.USAGE, (items) => {
-      this.cachedUsage = items.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-    });
+    bindProjectCollection<MaterialUsage>(
+      'materialUsage',
+      CACHE_KEYS.USAGE,
+      (raw: any) => raw as MaterialUsage,
+      (items) => {
+        this.cachedUsage = items.sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+      }
+    );
 
     // Work Progress Streams
-    bindProjectCollection<WorkProgressItem>('workProgress', CACHE_KEYS.WORK_PROGRESS, (items) => {
-      this.cachedWorkProgress = items;
-    });
+    bindProjectCollection<WorkProgressItem>(
+      'workProgress',
+      CACHE_KEYS.WORK_PROGRESS,
+      (raw: any) => {
+        const expectedBudgetKobo = typeof raw.expectedBudgetKobo === 'number' ? Math.round(raw.expectedBudgetKobo) : toKobo(raw.expectedBudget || 0);
+        const actualPaidKobo = typeof raw.actualPaidKobo === 'number' ? Math.round(raw.actualPaidKobo) : toKobo(raw.actualPaid || 0);
+        const outstandingKobo = Math.max(0, expectedBudgetKobo - actualPaidKobo);
+        return {
+          ...raw,
+          expectedBudgetKobo,
+          actualPaidKobo,
+          outstandingKobo,
+          expectedBudget: fromKobo(expectedBudgetKobo),
+          actualPaid: fromKobo(actualPaidKobo),
+          outstanding: fromKobo(outstandingKobo),
+        };
+      },
+      (items) => {
+        this.cachedWorkProgress = items;
+      }
+    );
 
     // Contractors
-    bindProjectCollection<Contractor>('contractors', CACHE_KEYS.CONTRACTORS, (items) => {
-      this.cachedContractors = items;
-    });
+    bindProjectCollection<Contractor>(
+      'contractors',
+      CACHE_KEYS.CONTRACTORS,
+      (raw: any) => {
+        const agreedAmountKobo = typeof raw.agreedAmountKobo === 'number' ? Math.round(raw.agreedAmountKobo) : toKobo(raw.agreedAmount || 0);
+        const totalPaidKobo = typeof raw.totalPaidKobo === 'number' ? Math.round(raw.totalPaidKobo) : toKobo(raw.totalPaid || 0);
+        const { outstandingBalanceKobo, overpaymentKobo } = calculateLabourBalancesFromKobo(agreedAmountKobo, totalPaidKobo);
+        return {
+          ...raw,
+          agreedAmountKobo,
+          totalPaidKobo,
+          outstandingBalanceKobo,
+          overpaymentKobo,
+          agreedAmount: fromKobo(agreedAmountKobo),
+          totalPaid: fromKobo(totalPaidKobo),
+          outstandingBalance: fromKobo(outstandingBalanceKobo),
+          overpayment: fromKobo(overpaymentKobo),
+        };
+      },
+      (items) => {
+        this.cachedContractors = items;
+      }
+    );
 
     // Labour Payments
-    bindProjectCollection<LabourPayment>('labourPayments', CACHE_KEYS.LABOUR_PAYMENTS, (items) => {
-      this.cachedLabourPayments = items.sort(
-        (a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
-      );
-    });
+    bindProjectCollection<LabourPayment>(
+      'labourPayments',
+      CACHE_KEYS.LABOUR_PAYMENTS,
+      (raw: any) => {
+        const amountKobo = typeof raw.amountKobo === 'number' ? Math.round(raw.amountKobo) : toKobo(raw.amount || 0);
+        return {
+          ...raw,
+          amountKobo,
+          amount: fromKobo(amountKobo),
+        };
+      },
+      (items) => {
+        this.cachedLabourPayments = items.sort(
+          (a, b) => new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime()
+        );
+      }
+    );
 
     // Transportation
-    bindProjectCollection<TransportationRecord>('transportation', CACHE_KEYS.TRANSPORTATION, (items) => {
-      this.cachedTransportation = items.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-    });
+    bindProjectCollection<TransportationRecord>(
+      'transportation',
+      CACHE_KEYS.TRANSPORTATION,
+      (raw: any) => {
+        const costKobo = typeof raw.costKobo === 'number' ? Math.round(raw.costKobo) : toKobo(raw.cost || 0);
+        return {
+          ...raw,
+          costKobo,
+          cost: fromKobo(costKobo),
+        };
+      },
+      (items) => {
+        this.cachedTransportation = items.sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+      }
+    );
 
     // Other Expenses
-    bindProjectCollection<OtherExpenseRecord>('otherExpenses', CACHE_KEYS.OTHER_EXPENSES, (items) => {
-      this.cachedOtherExpenses = items.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-    });
+    bindProjectCollection<OtherExpenseRecord>(
+      'otherExpenses',
+      CACHE_KEYS.OTHER_EXPENSES,
+      (raw: any) => {
+        const amountKobo = typeof raw.amountKobo === 'number' ? Math.round(raw.amountKobo) : toKobo(raw.amount || 0);
+        return {
+          ...raw,
+          amountKobo,
+          amount: fromKobo(amountKobo),
+        };
+      },
+      (items) => {
+        this.cachedOtherExpenses = items.sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+      }
+    );
   }
 
   /**
@@ -460,12 +684,10 @@ export class ConstructionTrackerService {
   public static async switchProject(projectId: string): Promise<void> {
     const target = this.cachedProjects.find((p) => p.id === projectId);
     if (!target) return;
-
     this.activeProjectId = projectId;
     this.cachedProject = target;
     writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, projectId);
     writeLocalCache(CACHE_KEYS.PROJECT, target);
-
     const ownerId = this.getOwnerId();
     this.bindSubcollections(ownerId, projectId);
     this.notify();
@@ -474,25 +696,29 @@ export class ConstructionTrackerService {
   public static async createProject(data: Partial<ProjectSettings>): Promise<ProjectSettings> {
     const ownerId = this.getOwnerId();
     const now = new Date().toISOString();
-    const projectId = `proj_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const projectId = data.id || `proj_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
+    const budgetCapKobo =
+      typeof data.budgetCapKobo === 'number'
+        ? Math.max(0, Math.round(data.budgetCapKobo))
+        : toKobo(Math.max(0, data.budgetCap || 0));
+    const budgetCap = fromKobo(budgetCapKobo);
 
-    const budgetCap = Math.max(0, data.budgetCap || 27000000);
     const newProject: ProjectSettings = {
       id: projectId,
-      name: data.name || 'New Construction Project',
+      name: data.name || 'New Project',
       code: data.code || `#PRJ-${Math.floor(100 + Math.random() * 900)}`,
-      stage: data.stage || 'Finishing',
-      location: data.location || data.siteAddress || 'Lagos, Nigeria',
-      siteAddress: data.siteAddress || data.location || 'Lagos, Nigeria',
+      stage: data.stage || 'Planning',
+      location: data.location || data.siteAddress || '',
+      siteAddress: data.siteAddress || data.location || '',
       currencySymbol: data.currencySymbol || '₦',
       timezone: data.timezone || 'Africa/Lagos',
       budgetCap,
-      budgetCapKobo: toKobo(budgetCap),
+      budgetCapKobo,
       startDate: data.startDate || now.split('T')[0],
-      handoverDate: data.handoverDate || '2026-12-31',
+      handoverDate: data.handoverDate || '',
       status: data.status || 'Active',
-      currency: 'NGN',
-      projectManager: data.projectManager || 'Site Engineer',
+      currency: data.currency || 'NGN',
+      projectManager: data.projectManager || '',
       activeArtisans: data.activeArtisans || 0,
       ownerId,
       createdAt: now,
@@ -508,7 +734,12 @@ export class ConstructionTrackerService {
     try {
       const ref = doc(db, 'projects', projectId);
       await setDoc(ref, newProject);
-      await this.recordAuditEvent('CREATE', 'ProjectSettings', projectId, `Created project: ${newProject.name} (${newProject.code})`);
+      await this.recordAuditEvent(
+        'CREATE',
+        'ProjectSettings',
+        projectId,
+        `Created project: ${newProject.name} (${newProject.code})`
+      );
       this.syncStatus = 'synced';
       this.lastError = null;
     } catch (err: any) {
@@ -542,7 +773,12 @@ export class ConstructionTrackerService {
         await this.switchProject(remaining.id);
       }
 
-      await this.recordAuditEvent('DELETE', 'ProjectSettings', projectId, `Deleted project id ${projectId}`);
+      await this.recordAuditEvent(
+        'DELETE',
+        'ProjectSettings',
+        projectId,
+        `Deleted project id ${projectId}`
+      );
       this.syncStatus = 'synced';
       this.lastError = null;
     } catch (err: any) {
@@ -554,25 +790,27 @@ export class ConstructionTrackerService {
   }
 
   public static getProject(): ProjectSettings {
-    return (
-      this.cachedProject || {
-        ...initialProject,
-        siteAddress: initialProject.location,
-        projectManager: 'Site Engineer',
-      }
-    );
+    if (this.cachedProject) return this.cachedProject;
+    if (this.cachedProjects.length > 0) return this.cachedProjects[0];
+    return EMPTY_PROJECT_FALLBACK;
   }
 
   public static async updateProject(updates: Partial<ProjectSettings>): Promise<ProjectSettings> {
     const ownerId = this.getOwnerId();
     const current = this.getProject();
-    const budgetCap = updates.budgetCap !== undefined ? Math.max(0, updates.budgetCap) : current.budgetCap;
+    const budgetCapKobo =
+      typeof updates.budgetCapKobo === 'number'
+        ? Math.max(0, Math.round(updates.budgetCapKobo))
+        : updates.budgetCap !== undefined
+        ? toKobo(Math.max(0, updates.budgetCap))
+        : current.budgetCapKobo ?? toKobo(current.budgetCap || 0);
+    const budgetCap = fromKobo(budgetCapKobo);
 
     const updated: ProjectSettings = {
       ...current,
       ...updates,
       budgetCap,
-      budgetCapKobo: toKobo(budgetCap),
+      budgetCapKobo,
       ownerId,
       updatedAt: new Date().toISOString(),
     };
@@ -580,7 +818,6 @@ export class ConstructionTrackerService {
     this.cachedProject = updated;
     const projIdx = this.cachedProjects.findIndex((p) => p.id === updated.id);
     if (projIdx >= 0) this.cachedProjects[projIdx] = updated;
-
     writeLocalCache(CACHE_KEYS.PROJECT, updated);
     writeLocalCache(CACHE_KEYS.PROJECTS, this.cachedProjects);
     this.syncStatus = 'saving';
@@ -617,6 +854,10 @@ export class ConstructionTrackerService {
     this.syncStatus = 'saving';
     this.notify();
     try {
+      this.explicitlyLoggedOut = false;
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+      }
       const res = await signInWithEmailAndPassword(auth, email, pass);
       this.currentUser = res.user;
       this.setupFirestoreSubscriptions(res.user.uid);
@@ -635,6 +876,10 @@ export class ConstructionTrackerService {
     this.syncStatus = 'saving';
     this.notify();
     try {
+      this.explicitlyLoggedOut = false;
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem(EXPLICIT_LOGOUT_KEY);
+      }
       const res = await createUserWithEmailAndPassword(auth, email, pass);
       if (displayName && res.user) {
         await updateProfile(res.user, { displayName });
@@ -653,14 +898,38 @@ export class ConstructionTrackerService {
   }
 
   public static async logout(): Promise<void> {
+    this.explicitlyLoggedOut = true;
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(EXPLICIT_LOGOUT_KEY, 'true');
+    }
+    // Clean up listeners
+    this.subcollectionUnsubscribers.forEach((unsub) => unsub());
+    this.subcollectionUnsubscribers = [];
+    this.unsubscribeListeners.forEach((unsub) => unsub());
+    this.unsubscribeListeners = [];
+
+    // Clear user state
     await signOut(auth);
     this.currentUser = null;
-    // Sign in anonymously to maintain uninterrupted session
-    try {
-      await signInAnonymously(auth);
-    } catch (err) {
-      console.warn('Anonymous re-sign in failed:', err);
+    this.cachedProject = null;
+    this.cachedProjects = [];
+    this.activeProjectId = '';
+    this.cachedMaterials = [];
+    this.cachedPurchases = [];
+    this.cachedUsage = [];
+    this.cachedWorkProgress = [];
+    this.cachedContractors = [];
+    this.cachedLabourPayments = [];
+    this.cachedTransportation = [];
+    this.cachedOtherExpenses = [];
+    this.cachedAuditEvents = [];
+
+    // Clear local cache for security on logout
+    if (typeof window !== 'undefined') {
+      Object.values(CACHE_KEYS).forEach((k) => localStorage.removeItem(k));
     }
+    this.syncStatus = 'synced';
+    this.notify();
   }
 
   // ==================== MATERIALS ====================
@@ -675,8 +944,18 @@ export class ConstructionTrackerService {
     const projectId = this.getProjectId();
     const now = new Date().toISOString();
 
-    const unitPriceKobo = toKobo(data.avgUnitPrice || 0);
-    const totalCostKobo = toKobo(data.totalCost || 0);
+    const unitPriceKobo =
+      typeof data.avgUnitPriceKobo === 'number'
+        ? Math.round(data.avgUnitPriceKobo)
+        : typeof data.unitPriceKobo === 'number'
+        ? Math.round(data.unitPriceKobo)
+        : toKobo(data.avgUnitPrice || 0);
+    const totalCostKobo =
+      typeof data.totalCostKobo === 'number'
+        ? Math.round(data.totalCostKobo)
+        : toKobo(data.totalCost || 0);
+    const avgUnitPrice = fromKobo(unitPriceKobo);
+    const totalCost = fromKobo(totalCostKobo);
 
     let savedMaterial: Material;
     if (data.id) {
@@ -687,6 +966,9 @@ export class ConstructionTrackerService {
         id: data.id,
         projectId,
         ownerId,
+        avgUnitPrice,
+        totalCost,
+        avgUnitPriceKobo: unitPriceKobo,
         unitPriceKobo,
         totalCostKobo,
         updatedAt: now,
@@ -699,6 +981,9 @@ export class ConstructionTrackerService {
         id: `mat_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
         projectId,
         ownerId,
+        avgUnitPrice,
+        totalCost,
+        avgUnitPriceKobo: unitPriceKobo,
         unitPriceKobo,
         totalCostKobo,
         createdAt: now,
@@ -779,14 +1064,35 @@ export class ConstructionTrackerService {
     const oldPurchase = data.id ? this.cachedPurchases.find((p) => p.id === data.id) : undefined;
     const oldMaterialId = oldPurchase?.materialId;
 
+    const unitPriceKobo =
+      typeof data.unitPriceKobo === 'number'
+        ? Math.round(data.unitPriceKobo)
+        : toKobo(data.unitPrice || 0);
+    const haulageCostKobo =
+      typeof data.haulageCostKobo === 'number'
+        ? Math.round(data.haulageCostKobo)
+        : toKobo(data.haulageCost || 0);
+    const offloadingCostKobo =
+      typeof data.offloadingCostKobo === 'number'
+        ? Math.round(data.offloadingCostKobo)
+        : toKobo(data.offloadingCost || 0);
+    const otherCostKobo =
+      typeof data.otherCostKobo === 'number'
+        ? Math.round(data.otherCostKobo)
+        : toKobo(data.otherCost || 0);
+    const amountPaidKobo =
+      typeof data.amountPaidKobo === 'number'
+        ? Math.round(data.amountPaidKobo)
+        : toKobo(data.amountPaid || 0);
+
     // Accurate integer kobo calculations
-    const calc = calculatePurchaseTotals(
-      data.quantity,
-      data.unitPrice,
-      data.haulageCost || 0,
-      data.offloadingCost || 0,
-      data.otherCost || 0,
-      data.amountPaid || 0
+    const calc = calculatePurchaseTotalsFromKobo(
+      data.quantity || 0,
+      unitPriceKobo,
+      haulageCostKobo,
+      offloadingCostKobo,
+      otherCostKobo,
+      amountPaidKobo
     );
 
     let savedPurchase: PurchaseRecord;
@@ -1045,10 +1351,16 @@ export class ConstructionTrackerService {
       (u) => u.materialId === materialId || u.materialName.toLowerCase().trim() === mat.name.toLowerCase().trim()
     );
 
-    const totalPurchased = purchases.reduce((sum, p) => sum + p.quantity, 0);
-    const totalMaterialCost = purchases.reduce((sum, p) => sum + p.materialCost, 0);
-    const avgUnitPrice = totalPurchased > 0 ? Math.round(totalMaterialCost / totalPurchased) : mat.avgUnitPrice;
-    const totalUsed = usages.reduce((sum, u) => sum + u.quantityUsed, 0);
+    const totalPurchased = purchases.reduce((sum, p) => sum + (p.quantity || 0), 0);
+    const totalMaterialCostKobo = purchases.reduce(
+      (sum, p) => sum + (p.materialCostKobo ?? toKobo(p.materialCost || 0)),
+      0
+    );
+    const avgUnitPriceKobo =
+      totalPurchased > 0
+        ? Math.round(totalMaterialCostKobo / totalPurchased)
+        : (mat.avgUnitPriceKobo ?? toKobo(mat.avgUnitPrice || 0));
+    const totalUsed = usages.reduce((sum, u) => sum + (u.quantityUsed || 0), 0);
     const remaining = Math.max(0, totalPurchased - totalUsed);
 
     const updatedMat: Material = {
@@ -1056,10 +1368,11 @@ export class ConstructionTrackerService {
       totalPurchased,
       totalUsed,
       remaining,
-      avgUnitPrice,
-      totalCost: totalMaterialCost,
-      unitPriceKobo: toKobo(avgUnitPrice),
-      totalCostKobo: toKobo(totalMaterialCost),
+      avgUnitPrice: fromKobo(avgUnitPriceKobo),
+      totalCost: fromKobo(totalMaterialCostKobo),
+      avgUnitPriceKobo,
+      unitPriceKobo: avgUnitPriceKobo,
+      totalCostKobo: totalMaterialCostKobo,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1091,13 +1404,19 @@ export class ConstructionTrackerService {
     const now = new Date().toISOString();
 
     const safePercent = Math.min(100, Math.max(0, Math.round(data.completionPercent || 0)));
-    const safeExpected = Math.max(0, data.expectedBudget || 0);
-    const safeActualPaid = Math.max(0, data.actualPaid || 0);
-    const outstanding = Math.max(0, safeExpected - safeActualPaid);
+    const expectedBudgetKobo =
+      typeof data.expectedBudgetKobo === 'number'
+        ? Math.max(0, Math.round(data.expectedBudgetKobo))
+        : toKobo(Math.max(0, data.expectedBudget || 0));
+    const actualPaidKobo =
+      typeof data.actualPaidKobo === 'number'
+        ? Math.max(0, Math.round(data.actualPaidKobo))
+        : toKobo(Math.max(0, data.actualPaid || 0));
+    const outstandingKobo = Math.max(0, expectedBudgetKobo - actualPaidKobo);
 
-    const expectedBudgetKobo = toKobo(safeExpected);
-    const actualPaidKobo = toKobo(safeActualPaid);
-    const outstandingKobo = toKobo(outstanding);
+    const safeExpected = fromKobo(expectedBudgetKobo);
+    const safeActualPaid = fromKobo(actualPaidKobo);
+    const outstanding = fromKobo(outstandingKobo);
 
     let saved: WorkProgressItem;
     if (data.id) {
@@ -1233,11 +1552,25 @@ export class ConstructionTrackerService {
 
     const contractorId = data.id || `cont_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
-    const payments = this.cachedLabourPayments.filter((p) => p.contractorId === contractorId);
-    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const agreedAmountKobo =
+      typeof data.agreedAmountKobo === 'number'
+        ? Math.max(0, Math.round(data.agreedAmountKobo))
+        : toKobo(Math.max(0, data.agreedAmount || 0));
 
-    const { outstandingBalance, overpayment, agreedAmountKobo, totalPaidKobo, outstandingBalanceKobo, overpaymentKobo } =
-      calculateLabourBalances(data.agreedAmount || 0, totalPaid);
+    const payments = this.cachedLabourPayments.filter((p) => p.contractorId === contractorId);
+    const totalPaidKobo = payments.reduce(
+      (sum, p) => sum + (p.amountKobo ?? toKobo(p.amount || 0)),
+      0
+    );
+
+    const {
+      agreedAmount,
+      totalPaid,
+      outstandingBalance,
+      overpayment,
+      outstandingBalanceKobo,
+      overpaymentKobo,
+    } = calculateLabourBalancesFromKobo(agreedAmountKobo, totalPaidKobo);
 
     let saved: Contractor;
     if (data.id) {
@@ -1248,7 +1581,7 @@ export class ConstructionTrackerService {
         id: data.id,
         projectId,
         ownerId,
-        agreedAmount: Math.max(0, data.agreedAmount || 0),
+        agreedAmount,
         totalPaid,
         outstandingBalance,
         overpayment,
@@ -1266,7 +1599,7 @@ export class ConstructionTrackerService {
         id: contractorId,
         projectId,
         ownerId,
-        agreedAmount: Math.max(0, data.agreedAmount || 0),
+        agreedAmount,
         totalPaid,
         outstandingBalance,
         overpayment,
@@ -1343,8 +1676,11 @@ export class ConstructionTrackerService {
     const oldPayment = data.id ? this.cachedLabourPayments.find((p) => p.id === data.id) : undefined;
     const oldContractorId = oldPayment?.contractorId;
 
-    const safeAmount = Math.max(0, data.amount || 0);
-    const amountKobo = toKobo(safeAmount);
+    const amountKobo =
+      typeof data.amountKobo === 'number'
+        ? Math.max(0, Math.round(data.amountKobo))
+        : toKobo(Math.max(0, data.amount || 0));
+    const safeAmount = fromKobo(amountKobo);
 
     let saved: LabourPayment;
     if (data.id) {
@@ -1441,15 +1777,29 @@ export class ConstructionTrackerService {
     if (!contractor) return;
 
     const payments = this.cachedLabourPayments.filter((p) => p.contractorId === contractorId);
-    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-    const { outstandingBalance, overpayment, totalPaidKobo, outstandingBalanceKobo, overpaymentKobo } =
-      calculateLabourBalances(contractor.agreedAmount, totalPaid);
+    const totalPaidKobo = payments.reduce(
+      (sum, p) => sum + (p.amountKobo ?? toKobo(p.amount || 0)),
+      0
+    );
+    const agreedAmountKobo =
+      contractor.agreedAmountKobo ?? toKobo(contractor.agreedAmount || 0);
 
-    const updated: Contractor = {
-      ...contractor,
+    const {
+      agreedAmount,
       totalPaid,
       outstandingBalance,
       overpayment,
+      outstandingBalanceKobo,
+      overpaymentKobo,
+    } = calculateLabourBalancesFromKobo(agreedAmountKobo, totalPaidKobo);
+
+    const updated: Contractor = {
+      ...contractor,
+      agreedAmount,
+      totalPaid,
+      outstandingBalance,
+      overpayment,
+      agreedAmountKobo,
       totalPaidKobo,
       outstandingBalanceKobo,
       overpaymentKobo,
@@ -1482,8 +1832,11 @@ export class ConstructionTrackerService {
     const ownerId = this.getOwnerId();
     const projectId = this.getProjectId();
     const now = new Date().toISOString();
-    const safeCost = Math.max(0, data.cost || 0);
-    const costKobo = toKobo(safeCost);
+    const costKobo =
+      typeof data.costKobo === 'number'
+        ? Math.max(0, Math.round(data.costKobo))
+        : toKobo(Math.max(0, data.cost || 0));
+    const safeCost = fromKobo(costKobo);
 
     let saved: TransportationRecord;
     if (data.id) {
@@ -1576,8 +1929,11 @@ export class ConstructionTrackerService {
     const ownerId = this.getOwnerId();
     const projectId = this.getProjectId();
     const now = new Date().toISOString();
-    const safeAmount = Math.max(0, data.amount || 0);
-    const amountKobo = toKobo(safeAmount);
+    const amountKobo =
+      typeof data.amountKobo === 'number'
+        ? Math.max(0, Math.round(data.amountKobo))
+        : toKobo(Math.max(0, data.amount || 0));
+    const safeAmount = fromKobo(amountKobo);
 
     let saved: OtherExpenseRecord;
     if (data.id) {
@@ -1670,69 +2026,138 @@ export class ConstructionTrackerService {
     const transportation = this.cachedTransportation;
     const otherExpenses = this.cachedOtherExpenses;
 
-    // 1. Purchases Breakdown
-    const materialPurchasesTotal = purchases.reduce((sum, p) => sum + p.materialCost, 0);
-    const purchaseOffloadingTotal = purchases.reduce((sum, p) => sum + (p.offloadingCost || 0), 0);
-    const purchaseOtherCostTotal = purchases.reduce((sum, p) => sum + (p.otherCost || 0), 0);
-    const purchaseHaulageSpent = purchases.reduce((sum, p) => sum + (p.haulageCost || 0), 0);
+    // 1. Purchases Breakdown in Kobo
+    const materialPurchasesTotalKobo = purchases.reduce(
+      (sum, p) => sum + (p.materialCostKobo ?? toKobo(p.materialCost || 0)),
+      0
+    );
+    const purchaseOffloadingTotalKobo = purchases.reduce(
+      (sum, p) => sum + (p.offloadingCostKobo ?? toKobo(p.offloadingCost || 0)),
+      0
+    );
+    const purchaseOtherCostTotalKobo = purchases.reduce(
+      (sum, p) => sum + (p.otherCostKobo ?? toKobo(p.otherCost || 0)),
+      0
+    );
+    const purchaseHaulageSpentKobo = purchases.reduce(
+      (sum, p) => sum + (p.haulageCostKobo ?? toKobo(p.haulageCost || 0)),
+      0
+    );
 
-    // Landed acquisition total of material purchases
-    const materialSpent = purchases.reduce((sum, p) => sum + p.acquisitionCost, 0);
+    // Landed acquisition total of material purchases in Kobo
+    const materialSpentKobo = purchases.reduce(
+      (sum, p) => sum + (p.acquisitionCostKobo ?? toKobo(p.acquisitionCost || 0)),
+      0
+    );
 
-    // 2. Transportation Breakdown (Preventing Double-Counting)
-    // Independent haulage records: where purchaseId is not set
-    const directTransportSpent = transportation
+    // 2. Transportation Breakdown (Preventing Double-Counting) in Kobo
+    const directTransportSpentKobo = transportation
       .filter((t) => !t.purchaseId)
-      .reduce((sum, t) => sum + t.cost, 0);
+      .reduce((sum, t) => sum + (t.costKobo ?? toKobo(t.cost || 0)), 0);
 
-    // Consolidated haulage spend: independent transport + purchase haulage costs
-    const transportationSpent = directTransportSpent + purchaseHaulageSpent;
+    const transportationSpentKobo = directTransportSpentKobo + purchaseHaulageSpentKobo;
 
-    // 3. Labour
-    const labourSpent = labourPayments.reduce((sum, l) => sum + l.amount, 0);
+    // 3. Labour in Kobo
+    const labourSpentKobo = labourPayments.reduce(
+      (sum, l) => sum + (l.amountKobo ?? toKobo(l.amount || 0)),
+      0
+    );
 
-    // 4. Other Expenses
-    const otherSpent = otherExpenses.reduce((sum, e) => sum + e.amount, 0);
+    // 4. Other Expenses in Kobo
+    const otherSpentKobo = otherExpenses.reduce(
+      (sum, e) => sum + (e.amountKobo ?? toKobo(e.amount || 0)),
+      0
+    );
 
-    // 5. Total Spent (Committed Landed Spend)
-    const totalSpent =
-      materialPurchasesTotal +
-      purchaseOffloadingTotal +
-      purchaseOtherCostTotal +
-      transportationSpent +
-      labourSpent +
-      otherSpent;
+    // 5. Total Spent (Committed Landed Spend) in Kobo
+    const totalSpentKobo =
+      materialPurchasesTotalKobo +
+      purchaseOffloadingTotalKobo +
+      purchaseOtherCostTotalKobo +
+      transportationSpentKobo +
+      labourSpentKobo +
+      otherSpentKobo;
 
-    // 6. Cash Flow vs Commitment
-    const purchaseCashPaid = purchases.reduce((sum, p) => sum + (p.amountPaid || 0), 0);
-    const cashExpenditure = purchaseCashPaid + labourSpent + directTransportSpent + otherSpent;
+    // 6. Cash Flow vs Commitment in Kobo
+    const purchaseCashPaidKobo = purchases.reduce(
+      (sum, p) => sum + (p.amountPaidKobo ?? toKobo(p.amountPaid || 0)),
+      0
+    );
+    const cashExpenditureKobo =
+      purchaseCashPaidKobo + labourSpentKobo + directTransportSpentKobo + otherSpentKobo;
 
-    const agreedLabourTotal = contractors.reduce((sum, c) => sum + (c.agreedAmount || 0), 0);
-    const committedCost = materialSpent + agreedLabourTotal + directTransportSpent + otherSpent;
+    const agreedLabourTotalKobo = contractors.reduce(
+      (sum, c) => sum + (c.agreedAmountKobo ?? toKobo(c.agreedAmount || 0)),
+      0
+    );
+    const committedCostKobo =
+      materialSpentKobo + agreedLabourTotalKobo + directTransportSpentKobo + otherSpentKobo;
 
-    // 7. Liabilities & Overpayments
-    const supplierOutstanding = purchases.reduce((sum, p) => sum + (p.supplierBalance || 0), 0);
-    const contractorOutstanding = contractors.reduce((sum, c) => sum + (c.outstandingBalance || 0), 0);
-    const totalOutstanding = supplierOutstanding + contractorOutstanding;
+    // 7. Liabilities & Overpayments in Kobo
+    const supplierOutstandingKobo = purchases.reduce(
+      (sum, p) => sum + (p.supplierBalanceKobo ?? toKobo(p.supplierBalance || 0)),
+      0
+    );
+    const contractorOutstandingKobo = contractors.reduce(
+      (sum, c) => sum + (c.outstandingBalanceKobo ?? toKobo(c.outstandingBalance || 0)),
+      0
+    );
+    const totalOutstandingKobo = supplierOutstandingKobo + contractorOutstandingKobo;
 
-    const supplierOverpayment = purchases.reduce((sum, p) => sum + (p.supplierOverpayment || 0), 0);
-    const contractorOverpayment = contractors.reduce((sum, c) => sum + (c.overpayment || 0), 0);
-    const totalOverpayments = supplierOverpayment + contractorOverpayment;
+    const supplierOverpaymentKobo = purchases.reduce(
+      (sum, p) => sum + (p.supplierOverpaymentKobo ?? toKobo(p.supplierOverpayment || 0)),
+      0
+    );
+    const contractorOverpaymentKobo = contractors.reduce(
+      (sum, c) => sum + (c.overpaymentKobo ?? toKobo(c.overpayment || 0)),
+      0
+    );
+    const totalOverpaymentsKobo = supplierOverpaymentKobo + contractorOverpaymentKobo;
 
-    // 8. Budget Metrics
-    const budgetCap = project.budgetCap || 27000000;
-    const remainingBuffer = Math.max(0, budgetCap - totalSpent);
-    const forecastRemainingCost = remainingBuffer;
-    const contingencyPercent = budgetCap > 0 ? Number(((remainingBuffer / budgetCap) * 100).toFixed(1)) : 0;
-    const spentPercent = budgetCap > 0 ? Number(((totalSpent / budgetCap) * 100).toFixed(1)) : 0;
+    // 8. Budget Metrics in Kobo
+    const budgetCapKobo = project.budgetCapKobo ?? toKobo(project.budgetCap || 0);
+    const remainingBufferKobo = Math.max(0, budgetCapKobo - totalSpentKobo);
+    const forecastRemainingCostKobo = remainingBufferKobo;
+    const contingencyPercent =
+      budgetCapKobo > 0 ? Number(((remainingBufferKobo / budgetCapKobo) * 100).toFixed(1)) : 0;
+    const spentPercent =
+      budgetCapKobo > 0 ? Number(((totalSpentKobo / budgetCapKobo) * 100).toFixed(1)) : 0;
+
+    // Naira representations for UI consumption
+    const materialPurchasesTotal = fromKobo(materialPurchasesTotalKobo);
+    const purchaseOffloadingTotal = fromKobo(purchaseOffloadingTotalKobo);
+    const purchaseOtherCostTotal = fromKobo(purchaseOtherCostTotalKobo);
+    const purchaseHaulageSpent = fromKobo(purchaseHaulageSpentKobo);
+    const materialSpent = fromKobo(materialSpentKobo);
+    const directTransportSpent = fromKobo(directTransportSpentKobo);
+    const transportationSpent = fromKobo(transportationSpentKobo);
+    const labourSpent = fromKobo(labourSpentKobo);
+    const otherSpent = fromKobo(otherSpentKobo);
+    const totalSpent = fromKobo(totalSpentKobo);
+    const cashExpenditure = fromKobo(cashExpenditureKobo);
+    const committedCost = fromKobo(committedCostKobo);
+    const supplierOutstanding = fromKobo(supplierOutstandingKobo);
+    const contractorOutstanding = fromKobo(contractorOutstandingKobo);
+    const totalOutstanding = fromKobo(totalOutstandingKobo);
+    const supplierOverpayment = fromKobo(supplierOverpaymentKobo);
+    const contractorOverpayment = fromKobo(contractorOverpaymentKobo);
+    const totalOverpayments = fromKobo(totalOverpaymentsKobo);
+    const budgetCap = fromKobo(budgetCapKobo);
+    const remainingBuffer = fromKobo(remainingBufferKobo);
+    const forecastRemainingCost = fromKobo(forecastRemainingCostKobo);
 
     // 9. Overall Completion Percentage
     let overallCompletionPercent = 0;
     if (workProgress.length > 0) {
-      const totalBudgetStreams = workProgress.reduce((sum, w) => sum + w.expectedBudget, 0);
+      const totalBudgetStreams = workProgress.reduce(
+        (sum, w) => sum + (w.expectedBudgetKobo ?? toKobo(w.expectedBudget || 0)),
+        0
+      );
       if (totalBudgetStreams > 0) {
         const weighted = workProgress.reduce(
-          (sum, w) => sum + (w.expectedBudget * w.completionPercent) / 100,
+          (sum, w) =>
+            sum +
+            ((w.expectedBudgetKobo ?? toKobo(w.expectedBudget || 0)) * w.completionPercent) / 100,
           0
         );
         overallCompletionPercent = Math.round((weighted / totalBudgetStreams) * 100);
@@ -1743,21 +2168,67 @@ export class ConstructionTrackerService {
     }
 
     // 10. Inventory Valuation
-    const stockInStoreValue = materials.reduce((sum, m) => sum + m.remaining * m.avgUnitPrice, 0);
+    const stockInStoreValueKobo = materials.reduce(
+      (sum, m) =>
+        sum + Math.round(m.remaining * (m.avgUnitPriceKobo ?? toKobo(m.avgUnitPrice || 0))),
+      0
+    );
+    const stockInStoreValue = fromKobo(stockInStoreValueKobo);
     const lowStockCount = materials.filter((m) => m.remaining > 0 && m.remaining <= 10).length;
     const depletedCount = materials.filter((m) => m.remaining === 0).length;
 
     // 11. Category Budgets Matrix
     const catBudgets = this.getCategoryBudgets();
+    const baseBudget = budgetCap > 0 ? budgetCap : 0;
+    const defaultMaterials = baseBudget > 0 ? Math.round(baseBudget * 0.55) : 0;
+    const defaultLabour = baseBudget > 0 ? Math.round(baseBudget * 0.25) : 0;
+    const defaultTransport = baseBudget > 0 ? Math.round(baseBudget * 0.06) : 0;
+    const defaultOther =
+      baseBudget > 0
+        ? Math.max(0, baseBudget - defaultMaterials - defaultLabour - defaultTransport)
+        : 0;
+
     const budgetCategories: BudgetCostItem[] = [
-      this.calculateBudgetCategory('Materials', catBudgets['Materials'] || 15000000, materialSpent),
-      this.calculateBudgetCategory('Labour', catBudgets['Labour'] || 6500000, labourSpent),
-      this.calculateBudgetCategory('Transportation', catBudgets['Transportation'] || 1500000, transportationSpent),
-      this.calculateBudgetCategory('Other Expenses', catBudgets['Other Expenses'] || 4000000, otherSpent),
+      this.calculateBudgetCategory(
+        'Materials',
+        catBudgets['Materials'] ?? defaultMaterials,
+        materialSpent
+      ),
+      this.calculateBudgetCategory('Labour', catBudgets['Labour'] ?? defaultLabour, labourSpent),
+      this.calculateBudgetCategory(
+        'Transportation',
+        catBudgets['Transportation'] ?? defaultTransport,
+        transportationSpent
+      ),
+      this.calculateBudgetCategory(
+        'Other Expenses',
+        catBudgets['Other Expenses'] ?? defaultOther,
+        otherSpent
+      ),
     ];
 
     return {
       project,
+      // Authoritative integer kobo aggregates
+      cashExpenditureKobo,
+      committedCostKobo,
+      totalSpentKobo,
+      budgetCapKobo,
+      remainingBufferKobo,
+      totalOutstandingKobo,
+      supplierOutstandingKobo,
+      contractorOutstandingKobo,
+      totalOverpaymentsKobo,
+      supplierOverpaymentKobo,
+      contractorOverpaymentKobo,
+      materialSpentKobo,
+      labourSpentKobo,
+      transportationSpentKobo,
+      otherSpentKobo,
+      directTransportSpentKobo,
+      purchaseHaulageSpentKobo,
+      stockInStoreValueKobo,
+      // Derived Naira aggregates
       cashExpenditure,
       committedCost,
       totalSpent,
@@ -1803,9 +2274,13 @@ export class ConstructionTrackerService {
     budget: number,
     actual: number
   ): BudgetCostItem {
-    const variance = budget - actual;
-    const remaining = Math.max(0, budget - actual);
-    const percentUsed = budget > 0 ? Number(((actual / budget) * 100).toFixed(1)) : 0;
+    const budgetKobo = toKobo(budget);
+    const actualKobo = toKobo(actual);
+    const varianceKobo = budgetKobo - actualKobo;
+    const remainingKobo = Math.max(0, varianceKobo);
+    const variance = fromKobo(varianceKobo);
+    const remaining = fromKobo(remainingKobo);
+    const percentUsed = budgetKobo > 0 ? Number(((actualKobo / budgetKobo) * 100).toFixed(1)) : 0;
 
     let status: 'Under Budget' | 'Watch Ceiling' | 'Near Budget' | 'Over Budget' = 'Under Budget';
     if (percentUsed > 100) {
@@ -1821,6 +2296,12 @@ export class ConstructionTrackerService {
     return {
       id: category,
       category,
+      budgetKobo,
+      actualKobo,
+      allocatedBudgetKobo: budgetKobo,
+      actualSpentKobo: actualKobo,
+      varianceKobo,
+      remainingKobo,
       budget,
       actual,
       allocatedBudget: budget,

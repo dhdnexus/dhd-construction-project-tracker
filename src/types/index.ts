@@ -45,8 +45,8 @@ export interface ProjectSettings {
   startDate?: string;
   status?: string;
   handoverDate: string;
-  budgetCap: number; // in Naira (e.g. 27000000)
-  budgetCapKobo?: number; // integer kobo (e.g. 2700000000)
+  budgetCapKobo: number; // authoritative integer kobo (e.g. 2700000000)
+  budgetCap: number; // derived Naira amount (fromKobo(budgetCapKobo))
   activeArtisans: number;
   location: string;
   currencySymbol: string;
@@ -70,11 +70,11 @@ export interface Material {
   totalPurchased: number;
   totalUsed: number;
   remaining: number; // totalPurchased - totalUsed (always >= 0)
-  avgUnitPrice: number; // weighted average unit price in Naira
-  avgUnitPriceKobo?: number; // weighted average unit price in kobo
+  avgUnitPriceKobo: number; // authoritative weighted average unit price in integer kobo
+  totalCostKobo: number; // authoritative total acquisition cost in integer kobo
   unitPriceKobo?: number; // alias
-  totalCost: number; // total acquisition cost spent on this material
-  totalCostKobo?: number;
+  avgUnitPrice: number; // derived Naira (fromKobo(avgUnitPriceKobo))
+  totalCost: number; // derived Naira (fromKobo(totalCostKobo))
   supplier: string;
   lotNumber?: string;
   image?: string;
@@ -92,24 +92,26 @@ export interface PurchaseRecord {
   category: MaterialCategory;
   quantity: number;
   unit: string;
+  // Authoritative integer kobo fields
+  unitPriceKobo: number;
+  materialCostKobo: number;
+  haulageCostKobo: number;
+  offloadingCostKobo: number;
+  otherCostKobo: number;
+  acquisitionCostKobo: number; // Landed Acquisition Cost in integer kobo
+  amountPaidKobo: number; // Cash paid to supplier in integer kobo
+  supplierBalanceKobo: number; // Outstanding liability in integer kobo
+  supplierOverpaymentKobo: number; // Overpayment in integer kobo
+  // Derived Naira fields
   unitPrice: number;
-  unitPriceKobo?: number;
-  materialCost: number; // quantity * unitPrice
-  materialCostKobo?: number;
+  materialCost: number;
   haulageCost: number;
-  haulageCostKobo?: number;
   offloadingCost: number;
-  offloadingCostKobo?: number;
   otherCost: number;
-  otherCostKobo?: number;
-  acquisitionCost: number; // Landed Acquisition Cost
-  acquisitionCostKobo?: number;
-  amountPaid: number; // Cash paid to supplier
-  amountPaidKobo?: number;
-  supplierBalance: number; // Outstanding liability
-  supplierBalanceKobo?: number;
-  supplierOverpayment?: number;
-  supplierOverpaymentKobo?: number;
+  acquisitionCost: number;
+  amountPaid: number;
+  supplierBalance: number;
+  supplierOverpayment: number;
   supplier: string;
   purchaseDate: string;
   transportRecordId?: string; // Explicit link to separate transport record if exists
@@ -144,12 +146,14 @@ export interface WorkProgressItem {
   category: string;
   status: WorkStatus;
   completionPercent: number; // 0 - 100
-  expectedBudget: number; // Milestone/stream budget
-  expectedBudgetKobo?: number;
-  actualPaid: number; // Actual disbursed
-  actualPaidKobo?: number;
-  outstanding: number; // expectedBudget - actualPaid (unbilled/remaining budget)
-  outstandingKobo?: number;
+  // Authoritative integer kobo fields
+  expectedBudgetKobo: number;
+  actualPaidKobo: number;
+  outstandingKobo: number;
+  // Derived Naira fields
+  expectedBudget: number;
+  actualPaid: number;
+  outstanding: number;
   startDate: string;
   targetDate: string;
   zone?: string;
@@ -166,14 +170,16 @@ export interface Contractor {
   name: string;
   trade: string; // e.g. "Tiling", "POP Plaster", "Plumbing"
   workDescription: string;
-  agreedAmount: number; // Contractual obligation in Naira
-  agreedAmountKobo?: number;
-  totalPaid: number; // Total payments logged in Naira
-  totalPaidKobo?: number;
-  outstandingBalance: number; // max(0, agreedAmount - totalPaid)
-  outstandingBalanceKobo?: number;
-  overpayment?: number; // max(0, totalPaid - agreedAmount) if paid > agreed
-  overpaymentKobo?: number;
+  // Authoritative integer kobo fields
+  agreedAmountKobo: number;
+  totalPaidKobo: number;
+  outstandingBalanceKobo: number;
+  overpaymentKobo: number;
+  // Derived Naira fields
+  agreedAmount: number;
+  totalPaid: number;
+  outstandingBalance: number;
+  overpayment: number;
   avatar?: string;
   isVerified: boolean;
   notes?: string;
@@ -188,8 +194,10 @@ export interface LabourPayment {
   contractorId: string; // Authoritative reference to Contractor
   contractorName: string;
   trade: string;
-  amount: number; // Payment in Naira
-  amountKobo?: number;
+  // Authoritative integer kobo
+  amountKobo: number;
+  // Derived Naira
+  amount: number;
   milestoneTitle: string; // e.g. "1st Tranche - Screeding & Layout"
   paymentMethod: PaymentMethod;
   paymentDate: string;
@@ -209,8 +217,10 @@ export interface TransportationRecord {
   from: string;
   to: string;
   transporter: string;
+  // Authoritative integer kobo
+  costKobo: number;
+  // Derived Naira
   cost: number;
-  costKobo?: number;
   waybillRef?: string;
   notes?: string;
   createdAt: string;
@@ -222,8 +232,10 @@ export interface OtherExpenseRecord {
   ownerId?: string;
   category: ExpenseCategory;
   description: string;
+  // Authoritative integer kobo
+  amountKobo: number;
+  // Derived Naira
   amount: number;
-  amountKobo?: number;
   date: string;
   paidBy: string;
   receiptRef?: string;
@@ -236,11 +248,19 @@ export type BudgetHealthStatus = 'Under Budget' | 'Watch Ceiling' | 'Near Budget
 export interface BudgetCostItem {
   id: string;
   category: 'Materials' | 'Labour' | 'Transportation' | 'Other Expenses';
+  // Authoritative integer kobo
+  budgetKobo: number;
+  actualKobo: number;
+  allocatedBudgetKobo: number;
+  actualSpentKobo: number;
+  varianceKobo: number; // budgetKobo - actualKobo
+  remainingKobo: number;
+  // Derived Naira
   budget: number;
   actual: number;
   allocatedBudget: number;
   actualSpent: number;
-  variance: number; // budget - actual
+  variance: number;
   remaining: number;
   percentUsed: number;
   status: BudgetHealthStatus;
@@ -274,9 +294,29 @@ export interface AuditEvent {
 
 export interface AggregatedMetrics {
   project: ProjectSettings;
+  // Authoritative integer kobo aggregates
+  cashExpenditureKobo: number;
+  committedCostKobo: number;
+  totalSpentKobo: number;
+  budgetCapKobo: number;
+  remainingBufferKobo: number;
+  totalOutstandingKobo: number;
+  supplierOutstandingKobo: number;
+  contractorOutstandingKobo: number;
+  totalOverpaymentsKobo: number;
+  supplierOverpaymentKobo: number;
+  contractorOverpaymentKobo: number;
+  materialSpentKobo: number;
+  labourSpentKobo: number;
+  transportationSpentKobo: number;
+  otherSpentKobo: number;
+  directTransportSpentKobo: number;
+  purchaseHaulageSpentKobo: number;
+  stockInStoreValueKobo: number;
+  // Derived Naira aggregates
   cashExpenditure: number; // Total Cash Paid across all streams
-  committedCost: number;   // Total Incurred contractual/landed obligations
-  totalSpent: number;      // Primary metric (committed landed spend)
+  committedCost: number; // Total Incurred contractual/landed obligations
+  totalSpent: number; // Primary metric (committed landed spend)
   budgetCap: number;
   remainingBuffer: number; // budgetCap - totalSpent
   contingencyPercent: number;

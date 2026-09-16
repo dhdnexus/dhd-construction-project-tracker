@@ -142,12 +142,12 @@ export const Header: React.FC<HeaderProps> = ({
                   title="Switch or create project"
                 >
                   <Building size={10} />
-                  <span className="truncate max-w-[130px] sm:max-w-[180px]">{project?.name || 'Finishing Site'}</span>
-                  <span className="opacity-60">{project?.code}</span>
+                  <span className="truncate max-w-[130px] sm:max-w-[180px]">{project?.name || 'Select Project'}</span>
+                  {project?.code && <span className="opacity-60">{project.code}</span>}
                 </button>
               ) : (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-[#E0E8FF] text-[#0F1E36] text-[10px] font-bold uppercase tracking-wider">
-                  {project?.name || 'Finishing Phase'} • {project?.code || 'Site'}
+                  {project?.name ? `${project.name} • ${project.code || ''}` : 'No Project Active'}
                 </span>
               )}
 

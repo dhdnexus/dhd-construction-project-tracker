@@ -8,6 +8,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
+  setPersistence,
+  browserLocalPersistence,
 } from 'firebase/auth';
 import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -20,6 +22,13 @@ if (getApps().length === 0) {
 }
 
 export const auth = getAuth(app);
+
+// Explicitly ensure browser local persistence for authentication
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence).catch((err) => {
+    console.warn('Auth persistence configuration warning:', err);
+  });
+}
 
 // Use custom firestoreDatabaseId if specified in firebase-applet-config.json
 const databaseId =

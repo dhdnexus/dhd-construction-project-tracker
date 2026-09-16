@@ -9,6 +9,7 @@ import {
   TransportationRecord,
   OtherExpenseRecord,
 } from '../types';
+import { toKobo } from '../utils/formatters';
 
 export const initialProject: ProjectSettings = {
   id: 'proj_lekki_b',
@@ -16,6 +17,7 @@ export const initialProject: ProjectSettings = {
   code: '#LK2-884',
   stage: 'Finishing & Snagging Stage',
   handoverDate: '2024-11-15',
+  budgetCapKobo: 2700000000,
   budgetCap: 27000000, // ₦27.0M
   activeArtisans: 18,
   location: 'Lekki Phase 2, Lagos, Nigeria',
@@ -25,7 +27,7 @@ export const initialProject: ProjectSettings = {
   projectManager: 'Engr. Babatunde Davies (MNSE)',
 };
 
-export const initialMaterials: Material[] = [
+const rawMaterials = [
   {
     id: 'mat_tiles_01',
     name: 'Spanish Glazed Tiles (60x60cm)',
@@ -127,7 +129,13 @@ export const initialMaterials: Material[] = [
   },
 ];
 
-export const initialPurchases: PurchaseRecord[] = [
+export const initialMaterials: Material[] = (rawMaterials as unknown as Material[]).map((m) => ({
+  ...m,
+  avgUnitPriceKobo: toKobo(m.avgUnitPrice),
+  totalCostKobo: toKobo(m.totalCost),
+}));
+
+const rawPurchases = [
   {
     id: 'pur_01',
     materialId: 'mat_tiles_01',
@@ -292,7 +300,21 @@ export const initialUsage: MaterialUsage[] = [
   },
 ];
 
-export const initialWorkProgress: WorkProgressItem[] = [
+export const initialPurchases: PurchaseRecord[] = (rawPurchases as unknown as PurchaseRecord[]).map((p) => ({
+  ...p,
+  unitPriceKobo: toKobo(p.unitPrice),
+  materialCostKobo: toKobo(p.materialCost),
+  haulageCostKobo: toKobo(p.haulageCost),
+  offloadingCostKobo: toKobo(p.offloadingCost),
+  otherCostKobo: toKobo(p.otherCost),
+  acquisitionCostKobo: toKobo(p.acquisitionCost),
+  amountPaidKobo: toKobo(p.amountPaid),
+  supplierBalanceKobo: toKobo(p.supplierBalance),
+  supplierOverpaymentKobo: toKobo((p as any).supplierOverpayment || 0),
+  supplierOverpayment: (p as any).supplierOverpayment || 0,
+}));
+
+const rawWorkProgress = [
   {
     id: 'wp_pop',
     name: 'POP False Ceilings & Bulkheads',
@@ -397,7 +419,14 @@ export const initialWorkProgress: WorkProgressItem[] = [
   },
 ];
 
-export const initialContractors: Contractor[] = [
+export const initialWorkProgress: WorkProgressItem[] = (rawWorkProgress as unknown as WorkProgressItem[]).map((w) => ({
+  ...w,
+  expectedBudgetKobo: toKobo(w.expectedBudget),
+  actualPaidKobo: toKobo(w.actualPaid),
+  outstandingKobo: toKobo(w.outstanding),
+}));
+
+const rawContractors = [
   {
     id: 'cont_emeka',
     name: 'Master Tiler Emeka & Team',
@@ -456,7 +485,16 @@ export const initialContractors: Contractor[] = [
   },
 ];
 
-export const initialLabourPayments: LabourPayment[] = [
+export const initialContractors: Contractor[] = (rawContractors as unknown as Contractor[]).map((c) => ({
+  ...c,
+  agreedAmountKobo: toKobo(c.agreedAmount),
+  totalPaidKobo: toKobo(c.totalPaid),
+  outstandingBalanceKobo: toKobo(c.outstandingBalance),
+  overpaymentKobo: toKobo((c as any).overpayment || 0),
+  overpayment: (c as any).overpayment || 0,
+}));
+
+const rawLabourPayments = [
   {
     id: 'pay_01',
     contractorId: 'cont_emeka',
@@ -550,7 +588,12 @@ export const initialLabourPayments: LabourPayment[] = [
   },
 ];
 
-export const initialTransportation: TransportationRecord[] = [
+export const initialLabourPayments: LabourPayment[] = (rawLabourPayments as unknown as LabourPayment[]).map((l) => ({
+  ...l,
+  amountKobo: toKobo(l.amount),
+}));
+
+const rawTransportation = [
   {
     id: 'trans_01',
     date: '2024-10-03',
@@ -605,7 +648,12 @@ export const initialTransportation: TransportationRecord[] = [
   },
 ];
 
-export const initialOtherExpenses: OtherExpenseRecord[] = [
+export const initialTransportation: TransportationRecord[] = rawTransportation.map((t) => ({
+  ...t,
+  costKobo: toKobo(t.cost),
+}));
+
+const rawOtherExpenses = [
   {
     id: 'exp_01',
     category: 'Fuel',
@@ -662,3 +710,9 @@ export const initialOtherExpenses: OtherExpenseRecord[] = [
     createdAt: '2024-09-08T09:00:00Z',
   },
 ];
+
+export const initialOtherExpenses: OtherExpenseRecord[] = (rawOtherExpenses as unknown as OtherExpenseRecord[]).map((e) => ({
+  ...e,
+  amountKobo: toKobo(e.amount),
+}));
+
