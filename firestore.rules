@@ -34,12 +34,26 @@ service cloud.firestore {
         get(/databases/$(database)/documents/projects/$(projId)).data.ownerId == request.auth.uid;
     }
 
+    function isProjectDeletionAuthorized(projId) {
+      return exists(/databases/$(database)/documents/auditEvents/delete_intent_$(projId)) &&
+        get(/databases/$(database)/documents/auditEvents/delete_intent_$(projId)).data.ownerId == request.auth.uid &&
+        get(/databases/$(database)/documents/auditEvents/delete_intent_$(projId)).data.projectId == projId &&
+        get(/databases/$(database)/documents/auditEvents/delete_intent_$(projId)).data.entityType == 'ProjectDeletionIntent';
+    }
+
+    function isValidProjectMaterial(materialId, projId) {
+      return materialId is string &&
+        exists(/databases/$(database)/documents/materials/$(materialId)) &&
+        get(/databases/$(database)/documents/materials/$(materialId)).data.ownerId == request.auth.uid &&
+        get(/databases/$(database)/documents/materials/$(materialId)).data.projectId == projId;
+    }
+
     // 1. Projects
     match /projects/{projectId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner();
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable();
-      allow delete: if isExistingDocOwner();
+      allow delete: if isExistingDocOwner() && isProjectDeletionAuthorized(projectId);
     }
 
     // 2. Materials
@@ -53,8 +67,15 @@ service cloud.firestore {
     // 3. Purchases
     match /purchases/{purchaseId} {
       allow read: if isExistingDocOwner();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
-      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow create: if isCreatingWithOwner() &&
+        request.resource.data.projectId is string &&
+        isUserProject(request.resource.data.projectId) &&
+        isValidProjectMaterial(request.resource.data.materialId, request.resource.data.projectId);
+      allow update: if isExistingDocOwner() &&
+        isCreatingWithOwner() &&
+        isOwnerImmutable() &&
+        isProjectImmutable() &&
+        isValidProjectMaterial(request.resource.data.materialId, request.resource.data.projectId);
       allow delete: if isExistingDocOwner();
     }
 
