@@ -14,6 +14,8 @@ import {
   Plus,
   Lock,
 } from 'lucide-react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { ProjectSettings, AuditEvent, UserProfile } from '../types';
 import { formatNaira, formatRelativeTime } from '../utils/formatters';
 import { ConstructionTrackerService } from '../services/storage';
@@ -56,6 +58,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeArtisans, setActiveArtisans] = useState<number | string>(project?.activeArtisans || 0);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
   // New project creation state in Settings
   const [showNewProjectForm, setShowNewProjectForm] = useState(false);
@@ -112,6 +115,49 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       alert(err?.message || 'Failed to create project.');
     } finally {
       setCreatingProject(false);
+    }
+  };
+
+  const handleDeleteProject = async (p: ProjectSettings) => {
+    if (!onDeleteProject) return;
+    if (!userProfile?.uid) {
+      alert('An authenticated project owner is required to delete a project.');
+      return;
+    }
+    if (!confirm(`Delete project "${p.name}"? This removes all its operational records from Firestore.`)) {
+      return;
+    }
+
+    setDeletingProjectId(p.id);
+    try {
+      const intentId = `delete_intent_${p.id}`;
+      const intentRef = doc(db, 'auditEvents', intentId);
+      const existingIntent = await getDoc(intentRef);
+
+      if (!existingIntent.exists()) {
+        const now = new Date().toISOString();
+        const intentEvent: AuditEvent = {
+          id: intentId,
+          timestamp: now,
+          action: 'CREATE',
+          entityType: 'ProjectDeletionIntent',
+          entity: 'System',
+          entityId: p.id,
+          user: userProfile.displayName || userProfile.email || 'Site User',
+          userEmail: userProfile.email || undefined,
+          ownerId: p.ownerId || userProfile.uid,
+          projectId: p.id,
+          summary: `Deletion initiated for project: ${p.name} (${p.code})`,
+          details: 'Durable deletion intent recorded before project purge.',
+        };
+        await setDoc(intentRef, intentEvent);
+      }
+
+      await onDeleteProject(p.id);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to authorize or delete project. No project deletion was confirmed.');
+    } finally {
+      setDeletingProjectId(null);
     }
   };
 
@@ -270,6 +316,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {projects.map((p) => {
               const isActive = p.id === (activeProjectId || project.id);
+              const isDeleting = deletingProjectId === p.id;
               return (
                 <div
                   key={p.id}
@@ -311,13 +358,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     {onDeleteProject && (
                       <button
                         type="button"
-                        onClick={() => {
-                          if (confirm(`Delete project "${p.name}"? This removes all its operational records from Firestore.`)) {
-                            onDeleteProject(p.id);
-                          }
-                        }}
-                        className="w-7 h-7 flex items-center justify-center text-[#75777E] hover:text-[#BA1A1A] hover:bg-[#FFDAD6] rounded-lg transition-colors cursor-pointer"
-                        title="Delete project"
+                        onClick={() => handleDeleteProject(p)}
+                        disabled={deletingProjectId !== null}
+                        className="w-7 h-7 flex items-center justify-center text-[#75777E] hover:text-[#BA1A1A] hover:bg-[#FFDAD6] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={isDeleting ? 'Deleting project...' : 'Delete project'}
+                        aria-label={isDeleting ? `Deleting ${p.name}` : `Delete ${p.name}`}
                       >
                         <Trash2 size={13} />
                       </button>
@@ -438,7 +483,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               required
               value={handoverDate}
               onChange={(e) => setHandoverDate(e.target.value)}
-              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none text-[#081B38]"
+              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] rounded-xl outline-none text-[#081B38]"
             />
           </div>
 
@@ -452,7 +497,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               required
               value={activeArtisans}
               onChange={(e) => setActiveArtisans(parseInt(e.target.value) || 0)}
-              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none text-[#081B38]"
+              className="w-full h-11 px-3.5 text-sm font-mono bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#081B38] focus:bg-white rounded-xl outline-none font-bold text-[#081B38]"
             />
           </div>
         </div>
