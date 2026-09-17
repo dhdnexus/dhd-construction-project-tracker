@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calculator, Truck, FileText, Check, AlertCircle } from 'lucide-react';
-import { PurchaseRecord, MaterialCategory } from '../../types';
+import { PurchaseRecord, Material, MaterialCategory } from '../../types';
 import { calculatePurchaseTotals, formatNaira } from '../../utils/formatters';
 
 interface PurchaseModalProps {
@@ -8,7 +8,7 @@ interface PurchaseModalProps {
   onClose: () => void;
   onSave: (data: Omit<PurchaseRecord, 'id' | 'materialCost' | 'acquisitionCost' | 'supplierBalance' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
   initialData?: PurchaseRecord | null;
-  existingMaterials?: (string | { name: string; id?: string; category?: MaterialCategory; unit?: string })[];
+  existingMaterials?: Material[];
 }
 
 const CATEGORIES: MaterialCategory[] = [
@@ -36,7 +36,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
   initialData,
   existingMaterials = [],
 }) => {
-  const [materialName, setMaterialName] = useState('');
+  const [materialId, setMaterialId] = useState('');
   const [category, setCategory] = useState<MaterialCategory>('Tiles');
   const [quantity, setQuantity] = useState<number | ''>('');
   const [unit, setUnit] = useState('boxes');
@@ -53,7 +53,7 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
 
   useEffect(() => {
     if (initialData) {
-      setMaterialName(initialData.materialName);
+      setMaterialId(initialData.materialId || '');
       setCategory(initialData.category);
       setQuantity(initialData.quantity);
       setUnit(initialData.unit);
@@ -67,10 +67,11 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
       setWaybillRef(initialData.waybillRef || '');
       setNotes(initialData.notes || '');
     } else {
-      setMaterialName('');
-      setCategory('Tiles');
+      const firstMaterial = existingMaterials[0];
+      setMaterialId(firstMaterial?.id || '');
+      setCategory(firstMaterial?.category || 'Tiles');
       setQuantity('');
-      setUnit('boxes');
+      setUnit(firstMaterial?.unit || 'boxes');
       setUnitPrice('');
       setHaulageCost('');
       setOffloadingCost('');
@@ -82,10 +83,11 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
       setNotes('');
     }
     setError(null);
-  }, [initialData, isOpen]);
+  }, [initialData, isOpen, existingMaterials]);
 
   if (!isOpen) return null;
 
+  const selectedMaterial = existingMaterials.find((m) => m.id === materialId);
   const numQty = typeof quantity === 'number' ? quantity : 0;
   const numUnitPrice = typeof unitPrice === 'number' ? unitPrice : 0;
   const numHaulage = typeof haulageCost === 'number' ? haulageCost : 0;
@@ -102,10 +104,19 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
     numPaid
   );
 
+  const handleMaterialChange = (nextMaterialId: string) => {
+    setMaterialId(nextMaterialId);
+    const nextMaterial = existingMaterials.find((m) => m.id === nextMaterialId);
+    if (nextMaterial) {
+      setCategory(nextMaterial.category);
+      setUnit(nextMaterial.unit);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!materialName.trim()) {
-      setError('Please specify the material name');
+    if (!selectedMaterial) {
+      setError('Please select a valid material from the Materials register before recording a purchase.');
       return;
     }
     if (numQty <= 0) {
@@ -120,11 +131,11 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
     try {
       onSave({
         id: initialData?.id,
-        materialId: initialData?.materialId,
-        materialName: materialName.trim(),
-        category,
+        materialId: selectedMaterial.id,
+        materialName: selectedMaterial.name,
+        category: selectedMaterial.category,
         quantity: numQty,
-        unit,
+        unit: selectedMaterial.unit,
         unitPrice: numUnitPrice,
         haulageCost: numHaulage,
         offloadingCost: numOffload,
@@ -169,44 +180,40 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
             </div>
           )}
 
-          {/* Material Name & Category */}
+          {/* Material & Category */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-[#081B38] uppercase tracking-wider mb-1">
-                Material Name *
+                Material *
               </label>
-              <input
-                type="text"
-                list="material-suggestions"
+              <select
                 required
-                value={materialName}
-                onChange={(e) => setMaterialName(e.target.value)}
-                placeholder="e.g. Spanish Glazed Tiles (60x60cm)"
-                className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none font-medium text-[#081B38]"
-              />
-              <datalist id="material-suggestions">
-                {existingMaterials.map((m, idx) => {
-                  const val = typeof m === 'string' ? m : m.name;
-                  return <option key={idx} value={val} />;
-                })}
-              </datalist>
+                value={materialId}
+                onChange={(e) => handleMaterialChange(e.target.value)}
+                disabled={existingMaterials.length === 0}
+                className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none font-medium text-[#081B38] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <option value="">{existingMaterials.length === 0 ? 'No materials registered — add one first' : 'Select a material'}</option>
+                {existingMaterials.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              {existingMaterials.length === 0 && (
+                <p className="text-[10px] text-[#75777E] mt-1">
+                  Register the material in Materials before recording its purchase so inventory stays linked by material ID.
+                </p>
+              )}
             </div>
 
             <div>
               <label className="block text-xs font-bold text-[#081B38] uppercase tracking-wider mb-1">
-                Category *
+                Category
               </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as MaterialCategory)}
-                className="w-full h-11 px-3 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none font-semibold text-[#081B38]"
-              >
-                {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
+              <div className="w-full h-11 px-3 flex items-center text-sm bg-[#F1F3FF] border border-[#C5C6CE] rounded-xl text-[#081B38] font-semibold">
+                {selectedMaterial?.category || category}
+              </div>
             </div>
           </div>
 
@@ -232,19 +239,9 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
               <label className="block text-xs font-bold text-[#081B38] uppercase tracking-wider mb-1">
                 Unit of Measure
               </label>
-              <input
-                type="text"
-                list="units-list"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-                placeholder="boxes, bags"
-                className="w-full h-11 px-3.5 text-sm bg-[#F9F9FF] border border-[#C5C6CE] focus:border-[#6B46C1] focus:bg-white rounded-xl outline-none text-[#081B38]"
-              />
-              <datalist id="units-list">
-                {COMMON_UNITS.map((u) => (
-                  <option key={u} value={u} />
-                ))}
-              </datalist>
+              <div className="w-full h-11 px-3 flex items-center text-sm bg-[#F1F3FF] border border-[#C5C6CE] rounded-xl text-[#081B38] font-semibold">
+                {selectedMaterial?.unit || unit}
+              </div>
             </div>
 
             <div>
@@ -426,7 +423,8 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
           <button
             onClick={handleSubmit}
             type="button"
-            className="px-5 py-2.5 bg-[#000412] hover:bg-[#0F1E36] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all cursor-pointer"
+            disabled={!selectedMaterial}
+            className="px-5 py-2.5 bg-[#000412] hover:bg-[#0F1E36] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Check size={16} />
             <span>{initialData ? 'Save Changes' : 'Record Purchase'}</span>
