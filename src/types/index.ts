@@ -245,6 +245,16 @@ export interface OtherExpenseRecord {
 
 export type BudgetHealthStatus = 'Under Budget' | 'Watch Ceiling' | 'Near Budget' | 'Over Budget';
 
+export interface CategoryBudgetRecord {
+  id: string;
+  projectId: string;
+  ownerId: string;
+  category: string;
+  budgetKobo: number;
+  budget: number;
+  updatedAt: string;
+}
+
 export interface BudgetCostItem {
   id: string;
   category: 'Materials' | 'Labour' | 'Transportation' | 'Other Expenses';

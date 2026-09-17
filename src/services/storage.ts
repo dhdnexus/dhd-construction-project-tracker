@@ -9,6 +9,8 @@ import {
   limit,
   writeBatch,
   getDoc,
+  getDocs,
+  DocumentReference,
 } from 'firebase/firestore';
 import {
   db,
@@ -32,6 +34,7 @@ import {
   TransportationRecord,
   OtherExpenseRecord,
   BudgetCostItem,
+  CategoryBudgetRecord,
   AuditEvent,
   AggregatedMetrics,
   SyncStatus,
@@ -144,12 +147,10 @@ export class ConstructionTrackerService {
   private static cachedLabourPayments: LabourPayment[] = readLocalCache(CACHE_KEYS.LABOUR_PAYMENTS, []);
   private static cachedTransportation: TransportationRecord[] = readLocalCache(CACHE_KEYS.TRANSPORTATION, []);
   private static cachedOtherExpenses: OtherExpenseRecord[] = readLocalCache(CACHE_KEYS.OTHER_EXPENSES, []);
-  private static cachedCategoryBudgets: Record<string, number> = readLocalCache(CACHE_KEYS.CATEGORY_BUDGETS, {
-    Materials: 15000000,
-    Labour: 6500000,
-    Transportation: 1500000,
-    'Other Expenses': 4000000,
-  });
+  private static getCategoryBudgetsCacheKey(projectId: string): string {
+    return projectId ? `${CACHE_KEYS.CATEGORY_BUDGETS}_${projectId}` : CACHE_KEYS.CATEGORY_BUDGETS;
+  }
+  private static cachedCategoryBudgets: Record<string, number> = {};
   private static cachedAuditEvents: AuditEvent[] = readLocalCache(CACHE_KEYS.AUDIT_EVENTS, []);
 
   public static notify(): void {
@@ -262,6 +263,7 @@ export class ConstructionTrackerService {
     this.cachedLabourPayments = [];
     this.cachedTransportation = [];
     this.cachedOtherExpenses = [];
+    this.cachedCategoryBudgets = {};
 
     writeLocalCache(CACHE_KEYS.PROJECTS, []);
     writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, '');
@@ -274,6 +276,7 @@ export class ConstructionTrackerService {
     writeLocalCache(CACHE_KEYS.LABOUR_PAYMENTS, []);
     writeLocalCache(CACHE_KEYS.TRANSPORTATION, []);
     writeLocalCache(CACHE_KEYS.OTHER_EXPENSES, []);
+    writeLocalCache(CACHE_KEYS.CATEGORY_BUDGETS, {});
   }
 
   private static clearActiveSessionData(): void {
@@ -402,9 +405,13 @@ export class ConstructionTrackerService {
       this.cachedLabourPayments = [];
       this.cachedTransportation = [];
       this.cachedOtherExpenses = [];
+      this.cachedCategoryBudgets = {};
       this.notify();
       return;
     }
+
+    // Initialize project-scoped category budgets from local cache
+    this.cachedCategoryBudgets = readLocalCache(this.getCategoryBudgetsCacheKey(projectId), {});
 
     const bindProjectCollection = <T extends { id: string }>(
       colName: string,
@@ -635,6 +642,43 @@ export class ConstructionTrackerService {
         );
       }
     );
+
+    // Category Budgets
+    try {
+      const q = query(
+        collection(db, 'categoryBudgets'),
+        where('ownerId', '==', ownerId),
+        where('projectId', '==', projectId)
+      );
+      const unsub = onSnapshot(
+        q,
+        (snapshot) => {
+          const budgetMap: Record<string, number> = {};
+          snapshot.forEach((d) => {
+            const data = d.data();
+            if (data.category) {
+              const budgetVal =
+                typeof data.budgetKobo === 'number'
+                  ? fromKobo(data.budgetKobo)
+                  : typeof data.budget === 'number'
+                  ? data.budget
+                  : 0;
+              budgetMap[data.category] = budgetVal;
+            }
+          });
+          this.cachedCategoryBudgets = budgetMap;
+          writeLocalCache(this.getCategoryBudgetsCacheKey(projectId), budgetMap);
+          this.syncStatus = 'synced';
+          this.notify();
+        },
+        (err) => {
+          console.warn('Firestore subscription error on categoryBudgets:', err);
+        }
+      );
+      this.subcollectionUnsubscribers.push(unsub);
+    } catch (err: any) {
+      console.warn('Error attaching listener to categoryBudgets:', err);
+    }
   }
 
   /**
@@ -686,6 +730,7 @@ export class ConstructionTrackerService {
     if (!target) return;
     this.activeProjectId = projectId;
     this.cachedProject = target;
+    this.cachedCategoryBudgets = readLocalCache(this.getCategoryBudgetsCacheKey(projectId), {});
     writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, projectId);
     writeLocalCache(CACHE_KEYS.PROJECT, target);
     const ownerId = this.getOwnerId();
@@ -756,32 +801,88 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteProject(projectId: string): Promise<void> {
-    if (this.cachedProjects.length <= 1) {
-      throw new Error('Cannot delete the only project. Create another project first.');
-    }
+    const ownerId = this.getOwnerId();
+    const targetProject = this.cachedProjects.find((p) => p.id === projectId);
 
     this.syncStatus = 'saving';
     this.notify();
 
     try {
-      await deleteDoc(doc(db, 'projects', projectId));
-      this.cachedProjects = this.cachedProjects.filter((p) => p.id !== projectId);
-      writeLocalCache(CACHE_KEYS.PROJECTS, this.cachedProjects);
-
-      if (this.activeProjectId === projectId) {
-        const remaining = this.cachedProjects[0];
-        await this.switchProject(remaining.id);
-      }
-
+      // Step 1: Record DELETE audit event FIRST while project document still exists in Firestore.
+      // Firestore security rules require isUserProject(projectId) which verifies project document existence.
+      // Note: auditEvents are append-only per firestore.rules (allow delete: if false;) to preserve immutable regulatory audit trails.
       await this.recordAuditEvent(
         'DELETE',
         'ProjectSettings',
         projectId,
-        `Deleted project id ${projectId}`
+        `Deleted project "${targetProject?.name || projectId}" (${targetProject?.code || ''}) and purged all child operational records`
       );
+
+      // Step 2: Query and delete all child operational collections scoped strictly to ownerId AND projectId
+      const collectionsToClean = [
+        'materials',
+        'purchases',
+        'materialUsage',
+        'workProgress',
+        'contractors',
+        'labourPayments',
+        'transportation',
+        'otherExpenses',
+        'categoryBudgets',
+      ];
+
+      const docRefsToDelete: DocumentReference[] = [];
+      for (const colName of collectionsToClean) {
+        const q = query(
+          collection(db, colName),
+          where('ownerId', '==', ownerId),
+          where('projectId', '==', projectId)
+        );
+        const snapshot = await getDocs(q);
+        snapshot.forEach((d) => {
+          docRefsToDelete.push(d.ref);
+        });
+      }
+
+      // Chunk batch operations to safely respect Firestore's 500-operation limit
+      const BATCH_SIZE = 400;
+      for (let i = 0; i < docRefsToDelete.length; i += BATCH_SIZE) {
+        const chunk = docRefsToDelete.slice(i, i + BATCH_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((docRef) => batch.delete(docRef));
+        await batch.commit();
+      }
+
+      // Step 3: Delete project document last
+      await deleteDoc(doc(db, 'projects', projectId));
+
+      // Step 4: Synchronize local state and caches
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(this.getCategoryBudgetsCacheKey(projectId));
+      }
+
+      this.cachedProjects = this.cachedProjects.filter((p) => p.id !== projectId);
+      writeLocalCache(CACHE_KEYS.PROJECTS, this.cachedProjects);
+
+      if (this.activeProjectId === projectId) {
+        if (this.cachedProjects.length > 0) {
+          const remaining = this.cachedProjects[0];
+          await this.switchProject(remaining.id);
+        } else {
+          // No projects remain: cleanly return to empty state
+          this.clearProjectData();
+          this.syncStatus = 'synced';
+          this.lastError = null;
+          this.notify();
+          return;
+        }
+      }
+
       this.syncStatus = 'synced';
       this.lastError = null;
+      this.notify();
     } catch (err: any) {
+      console.warn('Failed to delete project and cleanup child records:', err);
       this.syncStatus = 'error';
       this.lastError = err?.message || 'Failed to delete project';
       this.notify();
@@ -1095,6 +1196,31 @@ export class ConstructionTrackerService {
       amountPaidKobo
     );
 
+    let materialId = data.materialId;
+    if (!materialId || !materialId.trim()) {
+      const existingMat = this.cachedMaterials.find(
+        (m) => m.name.toLowerCase().trim() === (data.materialName || '').toLowerCase().trim()
+      );
+      if (existingMat) {
+        materialId = existingMat.id;
+      } else {
+        const newMat = await this.saveMaterial({
+          name: data.materialName,
+          category: data.category || 'Other',
+          unit: data.unit,
+          supplier: data.supplier || '',
+          avgUnitPrice: data.unitPrice,
+          avgUnitPriceKobo: unitPriceKobo,
+          totalPurchased: 0,
+          totalUsed: 0,
+          remaining: 0,
+          totalCost: 0,
+          totalCostKobo: 0,
+        });
+        materialId = newMat.id;
+      }
+    }
+
     let savedPurchase: PurchaseRecord;
     if (data.id) {
       const idx = this.cachedPurchases.findIndex((p) => p.id === data.id);
@@ -1102,6 +1228,7 @@ export class ConstructionTrackerService {
         ...(this.cachedPurchases[idx] || {}),
         ...data,
         id: data.id,
+        materialId,
         projectId,
         ownerId,
         materialCost: calc.materialCost,
@@ -1125,6 +1252,7 @@ export class ConstructionTrackerService {
       savedPurchase = {
         ...data,
         id: `purch_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        materialId,
         projectId,
         ownerId,
         materialCost: calc.materialCost,
@@ -1150,9 +1278,9 @@ export class ConstructionTrackerService {
     this.syncStatus = 'saving';
     this.notify();
 
-    // Reconcile material inventory
-    await this.reconcileMaterialInventory(data.materialId);
-    if (oldMaterialId && oldMaterialId !== data.materialId) {
+    // Reconcile material inventory using strict materialId
+    await this.reconcileMaterialInventory(materialId);
+    if (oldMaterialId && oldMaterialId !== materialId) {
       await this.reconcileMaterialInventory(oldMaterialId);
     }
 
@@ -1224,20 +1352,23 @@ export class ConstructionTrackerService {
     const oldUsage = data.id ? this.cachedUsage.find((u) => u.id === data.id) : undefined;
     const oldMaterialId = oldUsage?.materialId;
 
-    // Authoritative negative stock protection
+    if (!data.materialId || !data.materialId.trim()) {
+      throw new Error('Valid materialId is required to record material usage.');
+    }
+    const targetMaterial = this.cachedMaterials.find((m) => m.id === data.materialId);
+    if (!targetMaterial) {
+      throw new Error(`Material with ID "${data.materialId}" was not found in this project.`);
+    }
+
+    // Authoritative negative stock protection using strict materialId matching
     const materialPurchases = this.cachedPurchases.filter(
-      (p) =>
-        p.materialId === data.materialId ||
-        (p.materialName && p.materialName.toLowerCase().trim() === data.materialName.toLowerCase().trim())
+      (p) => p.materialId === data.materialId
     );
     const totalPurchased = materialPurchases.reduce((sum, p) => sum + p.quantity, 0);
 
     const otherUsages = this.cachedUsage
       .filter(
-        (u) =>
-          (u.materialId === data.materialId ||
-            u.materialName.toLowerCase().trim() === data.materialName.toLowerCase().trim()) &&
-          u.id !== data.id
+        (u) => u.materialId === data.materialId && u.id !== data.id
       )
       .reduce((sum, u) => sum + u.quantityUsed, 0);
 
@@ -1256,6 +1387,8 @@ export class ConstructionTrackerService {
         ...(this.cachedUsage[idx] || {}),
         ...data,
         id: data.id,
+        materialId: data.materialId,
+        materialName: targetMaterial.name,
         projectId,
         ownerId,
         updatedAt: now,
@@ -1266,6 +1399,8 @@ export class ConstructionTrackerService {
       savedUsage = {
         ...data,
         id: `use_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        materialId: data.materialId,
+        materialName: targetMaterial.name,
         projectId,
         ownerId,
         createdAt: now,
@@ -1345,10 +1480,10 @@ export class ConstructionTrackerService {
     if (!mat) return;
 
     const purchases = this.cachedPurchases.filter(
-      (p) => p.materialId === materialId || p.materialName.toLowerCase().trim() === mat.name.toLowerCase().trim()
+      (p) => p.materialId === materialId
     );
     const usages = this.cachedUsage.filter(
-      (u) => u.materialId === materialId || u.materialName.toLowerCase().trim() === mat.name.toLowerCase().trim()
+      (u) => u.materialId === materialId
     );
 
     const totalPurchased = purchases.reduce((sum, p) => sum + (p.quantity || 0), 0);
@@ -1488,6 +1623,11 @@ export class ConstructionTrackerService {
     if (!item) return;
 
     const safePercent = Math.min(100, Math.max(0, Math.round(newPercent)));
+    const oldPercent = item.completionPercent ?? 0;
+    if (oldPercent === safePercent) {
+      return;
+    }
+
     item.completionPercent = safePercent;
     if (safePercent === 100) {
       item.status = 'Completed';
@@ -1503,6 +1643,12 @@ export class ConstructionTrackerService {
     try {
       const ref = doc(db, 'workProgress', id);
       await setDoc(ref, item, { merge: true });
+      await this.recordAuditEvent(
+        'UPDATE',
+        'WorkProgress',
+        id,
+        `Updated progress: ${item.name || 'Work Stream'} from ${oldPercent}% to ${safePercent}%`
+      );
       this.syncStatus = 'synced';
       this.lastError = null;
     } catch (e: any) {
@@ -2259,14 +2405,67 @@ export class ConstructionTrackerService {
     };
   }
 
+  private static readonly DEFAULT_CATEGORY_BUDGETS: Record<string, number> = {
+    Materials: 15000000,
+    Labour: 6500000,
+    Transportation: 1500000,
+    'Other Expenses': 4000000,
+  };
+
   public static getCategoryBudgets(): Record<string, number> {
-    return this.cachedCategoryBudgets;
+    const projectId = this.getProjectId();
+    if (!projectId) {
+      return {};
+    }
+    return {
+      ...this.DEFAULT_CATEGORY_BUDGETS,
+      ...this.cachedCategoryBudgets,
+    };
   }
 
-  public static updateCategoryBudget(category: string, newBudget: number): void {
-    this.cachedCategoryBudgets[category] = Math.max(0, newBudget);
-    writeLocalCache(CACHE_KEYS.CATEGORY_BUDGETS, this.cachedCategoryBudgets);
+  public static async updateCategoryBudget(category: string, newBudget: number): Promise<void> {
+    const ownerId = this.getOwnerId();
+    const projectId = this.getProjectId();
+    if (!projectId) {
+      throw new Error('Active project is required to update category budgets.');
+    }
+
+    const budgetKobo = toKobo(Math.max(0, newBudget));
+    const budgetVal = fromKobo(budgetKobo);
+    this.cachedCategoryBudgets[category] = budgetVal;
+    writeLocalCache(this.getCategoryBudgetsCacheKey(projectId), this.cachedCategoryBudgets);
+    this.syncStatus = 'saving';
     this.notify();
+
+    try {
+      const docId = `${projectId}_${category.replace(/\s+/g, '_')}`;
+      const ref = doc(db, 'categoryBudgets', docId);
+      const now = new Date().toISOString();
+      const budgetDoc: CategoryBudgetRecord = {
+        id: docId,
+        ownerId,
+        projectId,
+        category,
+        budgetKobo,
+        budget: budgetVal,
+        updatedAt: now,
+      };
+      await setDoc(ref, budgetDoc, { merge: true });
+      await this.recordAuditEvent(
+        'UPDATE',
+        'CategoryBudget',
+        docId,
+        `Updated budget allocation for ${category}: ₦${budgetVal.toLocaleString()}`
+      );
+      this.syncStatus = 'synced';
+      this.lastError = null;
+    } catch (err: any) {
+      console.warn('Failed to save category budget in Firestore:', err);
+      this.syncStatus = 'error';
+      this.lastError = err?.message || 'Failed to persist category budget';
+      this.notify();
+      throw err;
+    }
   }
 
   private static calculateBudgetCategory(

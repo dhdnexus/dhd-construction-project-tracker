@@ -308,11 +308,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       )
                     )}
 
-                    {onDeleteProject && projects.length > 1 && (
+                    {onDeleteProject && (
                       <button
                         type="button"
                         onClick={() => {
-                          if (confirm(`Delete project "${p.name}"? This removes its records from Firestore.`)) {
+                          if (confirm(`Delete project "${p.name}"? This removes all its operational records from Firestore.`)) {
                             onDeleteProject(p.id);
                           }
                         }}
