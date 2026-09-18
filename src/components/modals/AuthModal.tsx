@@ -291,6 +291,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </span>
                 </button>
               </form>
+
+              <div className="mt-5 pt-4 border-t border-[#E8EDFF]">
+                <button
+                  type="button"
+                  onClick={() => { window.location.href = '/admin'; }}
+                  className="w-full h-10 rounded-xl text-xs font-semibold text-[#0F1E36] bg-[#F1F3FF] hover:bg-[#E8EDFF] border border-[#E0E8FF] flex items-center justify-center gap-2 transition-colors"
+                >
+                  <ShieldCheck size={15} />
+                  Administrator Sign In
+                </button>
+                <p className="text-[10px] text-center text-[#75777E] mt-2">
+                  Administrator accounts are provisioned separately.
+                </p>
+              </div>
             </div>
           )}
         </div>

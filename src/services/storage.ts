@@ -856,7 +856,12 @@ export class ConstructionTrackerService {
       // Step 3: Delete project document last
       await deleteDoc(doc(db, 'projects', projectId));
 
-      // Step 4: Synchronize local state and caches
+      // Step 4: Remove the durable deletion intent after the project has been deleted.
+      // The intent is deliberately retained until this point so the Firestore delete
+      // rule can require it.
+      await deleteDoc(doc(db, 'projectDeletionIntents', projectId));
+
+      // Step 5: Synchronize local state and caches
       if (typeof window !== 'undefined') {
         localStorage.removeItem(this.getCategoryBudgetsCacheKey(projectId));
       }

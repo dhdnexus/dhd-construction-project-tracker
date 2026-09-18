@@ -130,8 +130,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
     setDeletingProjectId(p.id);
     try {
-      const intentId = `delete_intent_${p.id}`;
-      const intentRef = doc(db, 'auditEvents', intentId);
+      const intentId = p.id;
+      const intentRef = doc(db, 'projectDeletionIntents', intentId);
       const existingIntent = await getDoc(intentRef);
 
       if (!existingIntent.exists()) {

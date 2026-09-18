@@ -35,10 +35,10 @@ service cloud.firestore {
     }
 
     function isProjectDeletionAuthorized(projId) {
-      return exists(/databases/$(database)/documents/auditEvents/delete_intent_$(projId)) &&
-        get(/databases/$(database)/documents/auditEvents/delete_intent_$(projId)).data.ownerId == request.auth.uid &&
-        get(/databases/$(database)/documents/auditEvents/delete_intent_$(projId)).data.projectId == projId &&
-        get(/databases/$(database)/documents/auditEvents/delete_intent_$(projId)).data.entityType == 'ProjectDeletionIntent';
+      return exists(/databases/$(database)/documents/projectDeletionIntents/$(projId)) &&
+        get(/databases/$(database)/documents/projectDeletionIntents/$(projId)).data.ownerId == request.auth.uid &&
+        get(/databases/$(database)/documents/projectDeletionIntents/$(projId)).data.projectId == projId &&
+        get(/databases/$(database)/documents/projectDeletionIntents/$(projId)).data.entityType == 'ProjectDeletionIntent';
     }
 
     function isValidProjectMaterial(materialId, projId) {
@@ -48,7 +48,42 @@ service cloud.firestore {
         get(/databases/$(database)/documents/materials/$(materialId)).data.projectId == projId;
     }
 
-    // 1. Projects
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // 0. User profiles
+    // Regular accounts may create their own profile only with the non-privileged user role.
+    // Administrator profiles are provisioned outside the client application.
+    match /userProfiles/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() &&
+        request.auth.uid == userId &&
+        request.resource.data.role == 'user';
+      allow update: if isAuthenticated() &&
+        request.auth.uid == userId &&
+        resource.data.role == request.resource.data.role;
+      allow delete: if false;
+    }
+
+    // 1. Durable project deletion intents
+    // A deletion intent must be created by the authenticated project owner before
+    // the project document can be deleted. The intent is kept separate from the
+    // immutable audit event stream so its document ID can safely be the project ID.
+    match /projectDeletionIntents/{projectId} {
+      allow read: if isExistingDocOwner();
+      allow create: if isAuthenticated() &&
+        request.auth.uid == request.resource.data.ownerId &&
+        request.resource.data.projectId == projectId &&
+        request.resource.data.entityType == 'ProjectDeletionIntent' &&
+        isUserProject(projectId);
+      allow update: if false;
+      allow delete: if isExistingDocOwner();
+    }
+
+    // 2. Projects
     match /projects/{projectId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner();
@@ -56,7 +91,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner() && isProjectDeletionAuthorized(projectId);
     }
 
-    // 2. Materials
+    // 3. Materials
     match /materials/{materialId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
@@ -64,7 +99,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 3. Purchases
+    // 4. Purchases
     match /purchases/{purchaseId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() &&
@@ -79,7 +114,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 4. Material Usage
+    // 5. Material Usage
     match /materialUsage/{usageId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
@@ -87,7 +122,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 5. Contractors
+    // 6. Contractors
     match /contractors/{contractorId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
@@ -95,7 +130,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 6. Labour Payments
+    // 7. Labour Payments
     match /labourPayments/{paymentId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
@@ -103,7 +138,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 7. Transportation & Haulage
+    // 8. Transportation & Haulage
     match /transportation/{transportId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
@@ -111,7 +146,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 8. Other Site Expenses
+    // 9. Other Site Expenses
     match /otherExpenses/{expenseId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
@@ -119,7 +154,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 9. Work Progress Milestones
+    // 10. Work Progress Milestones
     match /workProgress/{progressId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
@@ -127,7 +162,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 10. Category Budgets
+    // 11. Category Budgets
     match /categoryBudgets/{budgetId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
@@ -135,7 +170,7 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 11. Audit Events (strictly append-only: create allowed, update denied, delete denied)
+    // 12. Audit Events (strictly append-only: create allowed, update denied, delete denied)
     match /auditEvents/{eventId} {
       allow read: if isExistingDocOwner();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
