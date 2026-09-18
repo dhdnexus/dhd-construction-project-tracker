@@ -48,6 +48,26 @@ service cloud.firestore {
         get(/databases/$(database)/documents/materials/$(materialId)).data.projectId == projId;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/userProfiles/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // 0. User profiles
+    // Regular accounts may create their own profile only with the non-privileged user role.
+    // Administrator profiles are provisioned outside the client application.
+    match /userProfiles/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() &&
+        request.auth.uid == userId &&
+        request.resource.data.role == 'user';
+      allow update: if isAuthenticated() &&
+        request.auth.uid == userId &&
+        resource.data.role == request.resource.data.role;
+      allow delete: if false;
+    }
+
     // 1. Projects
     match /projects/{projectId} {
       allow read: if isExistingDocOwner();
