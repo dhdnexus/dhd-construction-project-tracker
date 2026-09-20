@@ -85,7 +85,7 @@ service cloud.firestore {
 
     // 2. Projects
     match /projects/{projectId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner();
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable();
       allow delete: if isExistingDocOwner() && isProjectDeletionAuthorized(projectId);
@@ -93,7 +93,7 @@ service cloud.firestore {
 
     // 3. Materials
     match /materials/{materialId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
@@ -101,7 +101,7 @@ service cloud.firestore {
 
     // 4. Purchases
     match /purchases/{purchaseId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() &&
         request.resource.data.projectId is string &&
         isUserProject(request.resource.data.projectId) &&
@@ -116,7 +116,7 @@ service cloud.firestore {
 
     // 5. Material Usage
     match /materialUsage/{usageId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
@@ -124,7 +124,7 @@ service cloud.firestore {
 
     // 6. Contractors
     match /contractors/{contractorId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
@@ -132,7 +132,7 @@ service cloud.firestore {
 
     // 7. Labour Payments
     match /labourPayments/{paymentId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
@@ -140,7 +140,7 @@ service cloud.firestore {
 
     // 8. Transportation & Haulage
     match /transportation/{transportId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
@@ -148,7 +148,7 @@ service cloud.firestore {
 
     // 9. Other Site Expenses
     match /otherExpenses/{expenseId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
@@ -156,7 +156,7 @@ service cloud.firestore {
 
     // 10. Work Progress Milestones
     match /workProgress/{progressId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
@@ -164,7 +164,7 @@ service cloud.firestore {
 
     // 11. Category Budgets
     match /categoryBudgets/{budgetId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner();
@@ -172,7 +172,7 @@ service cloud.firestore {
 
     // 12. Audit Events (strictly append-only: create allowed, update denied, delete denied)
     match /auditEvents/{eventId} {
-      allow read: if isExistingDocOwner();
+      allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if false; // Append-only audit events
       allow delete: if false; // Denied per Requirement 4
