@@ -779,15 +779,42 @@ export class ConstructionTrackerService {
     try {
       const ref = doc(db, 'projects', projectId);
       await setDoc(ref, newProject);
-      await this.recordAuditEvent(
-        'CREATE',
-        'ProjectSettings',
+
+      // Audit the creation against the newly-created project rather than relying
+      // on whichever project happened to be active before creation.
+      const event: AuditEvent = {
+        id: `aud_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        timestamp: new Date().toISOString(),
+        action: 'CREATE',
+        entityType: 'ProjectSettings',
+        entity: 'ProjectSettings',
+        entityId: projectId,
+        user: this.getUserEmail(),
+        userEmail: this.getUserEmail(),
+        ownerId,
         projectId,
-        `Created project: ${newProject.name} (${newProject.code})`
-      );
+        details: `Created project: ${newProject.name} (${newProject.code})`,
+        summary: `Created project: ${newProject.name} (${newProject.code})`,
+      };
+      this.cachedAuditEvents.unshift(event);
+      if (this.cachedAuditEvents.length > 50) this.cachedAuditEvents.pop();
+      writeLocalCache(CACHE_KEYS.AUDIT_EVENTS, this.cachedAuditEvents);
+      await setDoc(doc(db, 'auditEvents', event.id), event);
+
       this.syncStatus = 'synced';
       this.lastError = null;
     } catch (err: any) {
+      // Never leave a project-looking local cache entry behind when its
+      // Firestore write fails; that creates a misleading phantom workspace.
+      this.cachedProjects = this.cachedProjects.filter((p) => p.id !== projectId);
+      writeLocalCache(CACHE_KEYS.PROJECTS, this.cachedProjects);
+      if (this.activeProjectId === projectId) {
+        this.activeProjectId = '';
+        this.cachedProject = null;
+        writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, '');
+        writeLocalCache(CACHE_KEYS.PROJECT, null);
+      }
+
       console.warn('Failed to save project to Firestore:', err);
       this.syncStatus = 'error';
       this.lastError = err?.message || 'Failed to create project in database';
@@ -990,6 +1017,18 @@ export class ConstructionTrackerService {
       if (displayName && res.user) {
         await updateProfile(res.user, { displayName });
       }
+
+      // Persist a non-privileged user profile so registered accounts are visible
+      // to the administrator control centre. Administrator profiles are provisioned
+      // separately and cannot be created through this client flow.
+      await setDoc(doc(db, 'userProfiles', res.user.uid), {
+        email: res.user.email,
+        displayName: displayName?.trim() || res.user.displayName || null,
+        role: 'user',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
       this.currentUser = res.user;
       this.setupFirestoreSubscriptions(res.user.uid);
       this.syncStatus = 'synced';
