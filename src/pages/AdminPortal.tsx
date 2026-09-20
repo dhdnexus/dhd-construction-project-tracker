@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, ArrowLeft, LockKeyhole, LogIn, LogOut, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Eye, EyeOff, LockKeyhole, LogIn, LogOut, ShieldCheck } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '../firebase';
 import { AppLogo } from '../components/common/AppLogo';
@@ -11,6 +11,7 @@ export const AdminPortal: React.FC = () => {
   const [checkingSession, setCheckingSession] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,14 +164,25 @@ export const AdminPortal: React.FC = () => {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#44474D] mb-1">
                     Password
                   </label>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    className="w-full h-11 px-3 text-xs bg-[#F9F9FF] border border-[#E8EDFF] rounded-xl focus:outline-none focus:border-[#081B38]"
-                    placeholder="••••••••"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      className="w-full h-11 pl-3 pr-11 text-xs bg-[#F9F9FF] border border-[#E8EDFF] rounded-xl focus:outline-none focus:border-[#081B38]"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((visible) => !visible)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute inset-y-0 right-0 w-11 flex items-center justify-center text-[#75777E] hover:text-[#081B38]"
+                    >
+                      {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
