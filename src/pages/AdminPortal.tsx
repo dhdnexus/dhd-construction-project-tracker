@@ -106,6 +106,10 @@ export const AdminPortal: React.FC = () => {
     );
   }
 
+  if (admin) {
+    return <AdminControlCentre admin={admin} onSignOut={handleSignOut} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F9F9FF] text-[#081B38] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -122,10 +126,7 @@ export const AdminPortal: React.FC = () => {
             </div>
           </div>
 
-          {admin ? (
-            <AdminControlCentre admin={admin} onSignOut={handleSignOut} />
-          ) : (
-            <div className="p-6">
+          <div className="p-6">
               {error && (
                 <div className="mb-4 p-3 rounded-xl bg-[#FFDAD6] text-[#BA1A1A] text-xs font-semibold flex items-start gap-2 border border-[#FF5449]/30">
                   <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -190,8 +191,7 @@ export const AdminPortal: React.FC = () => {
                 <ArrowLeft size={14} />
                 Return to regular user access
               </button>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
