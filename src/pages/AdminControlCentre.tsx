@@ -2,6 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   Building2,
+  Banknote,
+  BriefcaseBusiness,
+  CircleAlert,
+  Percent,
+  WalletCards,
   ChevronRight,
   CircleDollarSign,
   FileClock,
@@ -17,7 +22,9 @@ import {
   AdminOverview,
   AdminProjectRecord,
   AdminUserRecord,
+  AdminProjectIntelligence,
   loadAdminOverview,
+  loadAdminProjectIntelligence,
 } from '../services/adminData';
 import { formatDate, formatNairaCompact } from '../utils/formatters';
 import { AppLogo } from '../components/common/AppLogo';
@@ -70,7 +77,7 @@ function StatCard({
   );
 }
 
-function ProjectTable({ projects, users }: { projects: AdminProjectRecord[]; users: AdminUserRecord[] }) {
+function ProjectTable({ projects, users, onSelect, selectedId }: { projects: AdminProjectRecord[]; users: AdminUserRecord[]; onSelect: (project: AdminProjectRecord) => void; selectedId: string | null }) {
   const ownerNames = useMemo(() => {
     return new Map(
       users.map((user) => [user.id, user.displayName || user.email || 'Unknown user']),
@@ -100,7 +107,11 @@ function ProjectTable({ projects, users }: { projects: AdminProjectRecord[]; use
         </thead>
         <tbody>
           {projects.map((project) => (
-            <tr key={project.id} className="border-b border-[#F0F2FA] last:border-0 hover:bg-[#F9F9FF]">
+            <tr
+              key={project.id}
+              onClick={() => onSelect(project)}
+              className={`border-b border-[#F0F2FA] last:border-0 hover:bg-[#F9F9FF] cursor-pointer ${selectedId === project.id ? 'bg-[#F1F3FF]' : ''}`}
+            >
               <td className="px-4 py-3">
                 <div className="font-semibold text-sm text-[#081B38]">{project.name}</div>
                 <div className="text-[10px] text-[#75777E]">{project.code || project.id}</div>
@@ -208,6 +219,23 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [projectIntelligence, setProjectIntelligence] = useState<AdminProjectIntelligence | null>(null);
+  const [projectLoading, setProjectLoading] = useState(false);
+
+  const selectProject = useCallback(async (project: AdminProjectRecord) => {
+    setSelectedProjectId(project.id);
+    setProjectLoading(true);
+    setError(null);
+    try {
+      setProjectIntelligence(await loadAdminProjectIntelligence(project.id));
+    } catch (err: any) {
+      setProjectIntelligence(null);
+      setError(err?.message || 'Unable to load project intelligence.');
+    } finally {
+      setProjectLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async (initial = false) => {
     if (initial) setLoading(true);
@@ -350,7 +378,15 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
                         View registry <ChevronRight size={13} />
                       </button>
                     </div>
-                    <ProjectTable projects={data.projects.slice(0, 6)} users={data.users} />
+                    <ProjectTable
+                      projects={data.projects.slice(0, 6)}
+                      users={data.users}
+                      selectedId={selectedProjectId}
+                      onSelect={(project) => {
+                        setActiveTab('projects');
+                        void selectProject(project);
+                      }}
+                    />
                   </section>
 
                   <section className="bg-white border border-[#E8EDFF] rounded-2xl overflow-hidden">
@@ -365,13 +401,77 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
             )}
 
             {activeTab === 'projects' && (
-              <section className="bg-white border border-[#E8EDFF] rounded-2xl overflow-hidden">
-                <div className="p-4 border-b border-[#E8EDFF]">
-                  <h3 className="text-sm font-bold">Project Registry</h3>
-                  <p className="text-[11px] text-[#75777E] mt-0.5">All project workspaces currently visible to the administrator.</p>
-                </div>
-                <ProjectTable projects={data.projects} users={data.users} />
-              </section>
+              <div className="space-y-5">
+                <section className="bg-white border border-[#E8EDFF] rounded-2xl overflow-hidden">
+                  <div className="p-4 border-b border-[#E8EDFF]">
+                    <h3 className="text-sm font-bold">Project Registry</h3>
+                    <p className="text-[11px] text-[#75777E] mt-0.5">All project workspaces currently visible to the administrator. Select a project for live operational intelligence.</p>
+                  </div>
+                  <ProjectTable
+                    projects={data.projects}
+                    users={data.users}
+                    selectedId={selectedProjectId}
+                    onSelect={(project) => void selectProject(project)}
+                  />
+                </section>
+
+                {selectedProjectId && (() => {
+                  const project = data.projects.find((item) => item.id === selectedProjectId);
+                  if (!project) return null;
+                  const intelligence = projectIntelligence;
+                  const spendPercent = intelligence && project.budgetCapKobo > 0
+                    ? Math.min(999, (intelligence.actualSpendKobo / project.budgetCapKobo) * 100)
+                    : 0;
+                  return (
+                    <section className="bg-white border border-[#E8EDFF] rounded-2xl overflow-hidden">
+                      <div className="p-4 border-b border-[#E8EDFF]">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-[#75777E]">Project intelligence</p>
+                            <h3 className="mt-1 text-lg font-bold">{project.name}</h3>
+                            <p className="text-[11px] text-[#75777E]">{project.code || project.id} • {project.location || 'Location not recorded'}</p>
+                          </div>
+                          <span className={`inline-flex self-start px-2 py-1 rounded-full text-[10px] font-bold ${statusClasses(project.status)}`}>
+                            {project.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {projectLoading ? (
+                        <div className="py-12 text-center text-xs font-bold text-[#75777E]">Loading project intelligence...</div>
+                      ) : intelligence ? (
+                        <div className="p-4 space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                            <StatCard icon={CircleDollarSign} label="Actual Spend" value={formatNairaCompact(intelligence.actualSpendKobo / 100)} detail={`${spendPercent.toFixed(1)}% of budget cap`} />
+                            <StatCard icon={WalletCards} label="Cash Paid" value={formatNairaCompact(intelligence.cashPaidKobo / 100)} detail="Recorded cash outflow" />
+                            <StatCard icon={CircleAlert} label="Outstanding" value={formatNairaCompact(intelligence.outstandingKobo / 100)} detail="Supplier + contractor balances" />
+                            <StatCard icon={Percent} label="Completion" value={`${intelligence.completionPercent.toFixed(1)}%`} detail={`${intelligence.workItems} work item${intelligence.workItems === 1 ? '' : 's'}`} />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                            {[
+                              ['Materials', intelligence.materialsKobo, Banknote],
+                              ['Labour', intelligence.labourKobo, BriefcaseBusiness],
+                              ['Transportation', intelligence.transportationKobo, Building2],
+                              ['Other Expenses', intelligence.otherExpensesKobo, Activity],
+                            ].map(([label, value, Icon]) => (
+                              <div key={String(label)} className="rounded-xl border border-[#E8EDFF] bg-[#F9F9FF] p-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#75777E]">{String(label)}</span>
+                                  <Icon size={15} className="text-[#6B46C1]" />
+                                </div>
+                                <p className="mt-2 text-sm font-bold text-[#081B38]">{formatNairaCompact(Number(value) / 100)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="py-12 text-center text-xs text-[#75777E]">No operational records are available for this project yet.</div>
+                      )}
+                    </section>
+                  );
+                })()}
+              </div>
             )}
 
             {activeTab === 'users' && (
