@@ -3,6 +3,7 @@ import { AlertCircle, ArrowLeft, LockKeyhole, LogIn, LogOut, ShieldCheck } from 
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '../firebase';
 import { AppLogo } from '../components/common/AppLogo';
+import { AdminControlCentre } from './AdminControlCentre';
 import { getCurrentAdmin, signInAdmin, signOutAdmin, AdminProfile } from '../services/adminAuth';
 
 export const AdminPortal: React.FC = () => {
@@ -122,54 +123,7 @@ export const AdminPortal: React.FC = () => {
           </div>
 
           {admin ? (
-            <div className="p-6 space-y-5">
-              <div className="p-4 rounded-xl bg-[#F1F3FF] border border-[#E0E8FF]">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
-                  <ShieldCheck size={16} />
-                  Administrator authenticated
-                </div>
-                <div className="mt-3 space-y-2">
-                  <div>
-                    <span className="block text-[10px] uppercase font-bold text-[#75777E]">Email</span>
-                    <span className="text-sm font-semibold">{admin.email}</span>
-                  </div>
-                  {admin.displayName && (
-                    <div>
-                      <span className="block text-[10px] uppercase font-bold text-[#75777E]">Name</span>
-                      <span className="text-sm font-semibold">{admin.displayName}</span>
-                    </div>
-                  )}
-                  <div>
-                    <span className="block text-[10px] uppercase font-bold text-[#75777E]">Role</span>
-                    <span className="text-sm font-semibold">Administrator</span>
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-xs leading-relaxed text-[#75777E]">
-                The administrator authentication boundary is active. Administrative modules can be added here without exposing administrator registration to regular users.
-              </p>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => { window.location.href = '/'; }}
-                  className="h-11 rounded-xl bg-[#F1F3FF] hover:bg-[#E8EDFF] text-[#081B38] text-xs font-bold flex items-center justify-center gap-2"
-                >
-                  <ArrowLeft size={15} />
-                  Return to Tracker
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  disabled={loading}
-                  className="h-11 rounded-xl bg-[#000412] hover:bg-[#0F1E36] text-white text-xs font-bold flex items-center justify-center gap-2"
-                >
-                  <LogOut size={15} />
-                  {loading ? 'Signing out...' : 'Sign Out'}
-                </button>
-              </div>
-            </div>
+            <AdminControlCentre admin={admin} onSignOut={handleSignOut} />
           ) : (
             <div className="p-6">
               {error && (
