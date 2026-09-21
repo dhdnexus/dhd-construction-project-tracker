@@ -160,7 +160,7 @@ service cloud.firestore {
         isOwnerImmutable() &&
         isProjectImmutable() &&
         isValidProjectMaterial(request.resource.data.materialId, request.resource.data.projectId);
-      allow delete: if isExistingDocOwner() || (isAdmin() && isAdminPurchaseDeletionAuthorized(purchaseId));
+      allow delete: if isExistingDocOwner() || (isAdmin() && isAdminMaterialDeletionAuthorized(resource.data.projectId, resource.data.materialId));
     }
 
     // 6. Material Usage
