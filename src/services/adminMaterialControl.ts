@@ -136,13 +136,11 @@ export async function deleteAdminMaterial(
   const [purchasesSnapshot, usageSnapshot, transportationSnapshot] = await Promise.all([
     getDocs(query(
       collection(db, 'purchases'),
-      where('projectId', '==', projectId),
       where('materialId', '==', materialId),
       limit(QUERY_LIMIT),
     )),
     getDocs(query(
       collection(db, 'materialUsage'),
-      where('projectId', '==', projectId),
       where('materialId', '==', materialId),
       limit(QUERY_LIMIT),
     )),
