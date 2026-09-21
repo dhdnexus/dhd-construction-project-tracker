@@ -1165,6 +1165,15 @@ export class ConstructionTrackerService {
 
   public static async deleteMaterial(id: string): Promise<void> {
     const target = this.cachedMaterials.find((m) => m.id === id);
+    if (!target) {
+      throw new Error('Material not found in the active project.');
+    }
+
+    const hasPurchaseHistory = this.cachedPurchases.some((purchase) => purchase.materialId === id);
+    if (hasPurchaseHistory || target.totalPurchased > 0 || target.totalUsed > 0) {
+      throw new Error('This material has transaction history and can only be removed through the administrator workflow.');
+    }
+
     this.cachedMaterials = this.cachedMaterials.filter((m) => m.id !== id);
     writeLocalCache(CACHE_KEYS.MATERIALS, this.cachedMaterials);
     this.syncStatus = 'saving';
@@ -2364,7 +2373,10 @@ export class ConstructionTrackerService {
       0
     );
     const stockInStoreValue = fromKobo(stockInStoreValueKobo);
-    const lowStockCount = materials.filter((m) => m.remaining > 0 && m.remaining <= 10).length;
+    const lowStockCount = materials.filter((m) => {
+      const threshold = Number(m.lowStockThreshold || 0);
+      return threshold > 0 && m.remaining > 0 && m.remaining <= threshold;
+    }).length;
     const depletedCount = materials.filter((m) => m.remaining === 0).length;
 
     // 11. Category Budgets Matrix
