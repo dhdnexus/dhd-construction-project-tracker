@@ -49,6 +49,18 @@ async function commitDeletes(refs: ReturnType<typeof doc>[]): Promise<void> {
   }
 }
 
+async function commitSmallBatches(
+  refs: ReturnType<typeof doc>[],
+  write: (batch: ReturnType<typeof writeBatch>, ref: ReturnType<typeof doc>, index: number) => void,
+): Promise<void> {
+  const size = 10;
+  for (let index = 0; index < refs.length; index += size) {
+    const batch = writeBatch(db);
+    refs.slice(index, index + size).forEach((ref, offset) => write(batch, ref, index + offset));
+    await batch.commit();
+  }
+}
+
 export async function loadAdminProjectMaterials(projectId: string): Promise<AdminMaterialRecord[]> {
   const [materialsSnapshot, purchasesSnapshot, usageSnapshot] = await Promise.all([
     getDocs(query(collection(db, 'materials'), where('projectId', '==', projectId), limit(QUERY_LIMIT))),
