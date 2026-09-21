@@ -27,7 +27,7 @@ import {
   loadAdminProjectIntelligence,
 } from '../services/adminData';
 import { formatDate, formatNairaCompact } from '../utils/formatters';
-import { AppLogo } from '../components/common/AppLogo';
+import { AppLogo } from '../components/common/AppLogo';\nimport { loadAdminProjectMaterials, deleteAdminMaterial, AdminMaterialRecord } from '../services/adminMaterialControl';
 
 type AdminTab = 'overview' | 'projects' | 'users' | 'audit';
 
@@ -221,21 +221,63 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
   const [error, setError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [projectIntelligence, setProjectIntelligence] = useState<AdminProjectIntelligence | null>(null);
-  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectLoading, setProjectLoading] = useState(false);\n  const [projectMaterials, setProjectMaterials] = useState<AdminMaterialRecord[]>([]);\n  const [materialsLoading, setMaterialsLoading] = useState(false);\n  const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(null);\n  const [pendingDeleteMaterial, setPendingDeleteMaterial] = useState<AdminMaterialRecord | null>(null);
 
   const selectProject = useCallback(async (project: AdminProjectRecord) => {
     setSelectedProjectId(project.id);
     setProjectLoading(true);
     setError(null);
     try {
-      setProjectIntelligence(await loadAdminProjectIntelligence(project.id));
+      setMaterialsLoading(true);
+      const [intelligence, materials] = await Promise.all([
+        loadAdminProjectIntelligence(project.id),
+        loadAdminProjectMaterials(project.id),
+      ]);
+      setProjectIntelligence(intelligence);
+      setProjectMaterials(materials);
     } catch (err: any) {
       setProjectIntelligence(null);
+      setProjectMaterials([]);
       setError(err?.message || 'Unable to load project intelligence.');
     } finally {
       setProjectLoading(false);
+      setMaterialsLoading(false);
     }
   }, []);
+
+  const refreshSelectedProject = useCallback(async (projectId: string) => {
+    const [intelligence, materials] = await Promise.all([
+      loadAdminProjectIntelligence(projectId),
+      loadAdminProjectMaterials(projectId),
+    ]);
+    setProjectIntelligence(intelligence);
+    setProjectMaterials(materials);
+  }, []);
+
+  const confirmDeleteMaterial = useCallback(async () => {
+    if (!pendingDeleteMaterial || !selectedProjectId) return;
+    setDeletingMaterialId(pendingDeleteMaterial.id);
+    setError(null);
+    try {
+      const result = await deleteAdminMaterial(
+        selectedProjectId,
+        pendingDeleteMaterial.id,
+        admin.uid,
+        admin.email,
+      );
+      setPendingDeleteMaterial(null);
+      await refreshSelectedProject(selectedProjectId);
+      await load(false);
+      setError(null);
+      window.alert(
+        `Material removed. Deleted ${result.deletedPurchases} purchase record(s), ${result.deletedUsage} usage record(s), and ${result.deletedTransport} linked transport record(s).`,
+      );
+    } catch (err: any) {
+      setError(err?.message || 'Administrator material deletion failed.');
+    } finally {
+      setDeletingMaterialId(null);
+    }
+  }, [admin.email, admin.uid, load, pendingDeleteMaterial, refreshSelectedProject, selectedProjectId]);
 
   const load = useCallback(async (initial = false) => {
     if (initial) setLoading(true);
@@ -468,6 +510,74 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
                       ) : (
                         <div className="py-12 text-center text-xs text-[#75777E]">No operational records are available for this project yet.</div>
                       )}
+
+                      <section className="border-t border-[#E8EDFF]">
+                        <div className="p-4 border-b border-[#E8EDFF] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <h4 className="text-sm font-bold">Material Registry</h4>
+                            <p className="text-[11px] text-[#75777E] mt-0.5">
+                              Administrative view of materials and their transaction history.
+                            </p>
+                          </div>
+                          <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#FFF7ED] text-[#9A3412] border border-[#FED7AA]">
+                            <ShieldAlert size={13} />
+                            <span className="text-[10px] font-bold">Destructive actions are audited</span>
+                          </div>
+                        </div>
+
+                        {materialsLoading ? (
+                          <div className="py-10 text-center text-xs font-bold text-[#75777E]">Loading material registry...</div>
+                        ) : projectMaterials.length === 0 ? (
+                          <div className="py-10 text-center text-xs text-[#75777E]">No materials are registered in this project.</div>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full min-w-[860px] text-left">
+                              <thead>
+                                <tr className="border-b border-[#E8EDFF] text-[10px] uppercase tracking-wider text-[#75777E]">
+                                  <th className="px-4 py-3 font-bold">Material</th>
+                                  <th className="px-4 py-3 font-bold">Stock</th>
+                                  <th className="px-4 py-3 font-bold">Purchases</th>
+                                  <th className="px-4 py-3 font-bold">Usage</th>
+                                  <th className="px-4 py-3 font-bold text-right">Acquisition</th>
+                                  <th className="px-4 py-3 font-bold text-right">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {projectMaterials.map((material) => {
+                                  const hasHistory = material.purchaseCount > 0 || material.usageCount > 0 || material.totalPurchased > 0 || material.totalUsed > 0;
+                                  return (
+                                    <tr key={material.id} className="border-b border-[#F0F2FA] last:border-0">
+                                      <td className="px-4 py-3">
+                                        <div className="font-semibold text-sm text-[#081B38]">{material.name}</div>
+                                        <div className="text-[10px] text-[#75777E]">{material.category} • {material.unit}</div>
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <div className="text-xs font-bold text-[#081B38]">{material.remaining} {material.unit}</div>
+                                        <div className="text-[10px] text-[#75777E]">{material.totalPurchased} purchased • {material.totalUsed} used</div>
+                                      </td>
+                                      <td className="px-4 py-3 text-xs font-semibold">{material.purchaseCount}</td>
+                                      <td className="px-4 py-3 text-xs font-semibold">{material.usageCount}</td>
+                                      <td className="px-4 py-3 text-right text-xs font-mono font-bold">{formatNairaCompact(material.totalCostKobo / 100)}</td>
+                                      <td className="px-4 py-3 text-right">
+                                        <button
+                                          type="button"
+                                          onClick={() => setPendingDeleteMaterial(material)}
+                                          disabled={deletingMaterialId !== null}
+                                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#FFF1F2] text-[#BE123C] border border-[#FECDD3] text-[10px] font-bold hover:bg-[#FFE4E6] disabled:opacity-50"
+                                          title={hasHistory ? 'Remove material and all linked transaction history' : 'Remove unused material'}
+                                        >
+                                          <Trash2 size={13} />
+                                          Remove
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </section>
                     </section>
                   );
                 })()}
@@ -496,6 +606,47 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
           </>
         )}
       </main>
+
+      {pendingDeleteMaterial && (
+        <div className="fixed inset-0 z-50 bg-[#000412]/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl border border-[#E8EDFF] shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-[#E8EDFF] flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#FFF1F2] text-[#BE123C] flex items-center justify-center shrink-0">
+                  <Trash2 size={18} />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-[#BE123C]">Permanent administrator action</p>
+                  <h3 className="mt-1 text-lg font-bold text-[#081B38]">Remove {pendingDeleteMaterial.name}?</h3>
+                </div>
+              </div>
+              <button type="button" onClick={() => setPendingDeleteMaterial(null)} className="w-8 h-8 rounded-lg hover:bg-[#F1F3FF] flex items-center justify-center text-[#75777E]">
+                <X size={17} />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-[#44474D]">
+                This action permanently removes the material from the selected project.
+              </p>
+              <div className="rounded-xl border border-[#FED7AA] bg-[#FFF7ED] p-3 text-xs text-[#9A3412]">
+                <strong>Linked history will also be removed:</strong> {pendingDeleteMaterial.purchaseCount} purchase record(s), {pendingDeleteMaterial.usageCount} usage record(s), and any transport records linked to those purchases.
+              </div>
+              <p className="text-[11px] text-[#75777E]">
+                This cannot be undone from the application. The administrator action will be recorded in the append-only audit trail.
+              </p>
+            </div>
+            <div className="p-5 pt-0 flex justify-end gap-2">
+              <button type="button" onClick={() => setPendingDeleteMaterial(null)} disabled={deletingMaterialId !== null} className="h-10 px-4 rounded-xl border border-[#E8EDFF] bg-white text-xs font-bold text-[#44474D]">
+                Cancel
+              </button>
+              <button type="button" onClick={() => void confirmDeleteMaterial()} disabled={deletingMaterialId !== null} className="h-10 px-4 rounded-xl bg-[#BE123C] text-white text-xs font-bold flex items-center gap-2 disabled:opacity-60">
+                <Trash2 size={14} />
+                {deletingMaterialId ? 'Removing...' : 'Confirm Permanent Removal'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
