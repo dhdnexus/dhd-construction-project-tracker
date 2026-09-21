@@ -70,6 +70,7 @@ export interface Material {
   totalPurchased: number;
   totalUsed: number;
   remaining: number; // totalPurchased - totalUsed (always >= 0)
+  lowStockThreshold?: number; // Reorder warning level in the material's unit; 0/undefined disables the warning
   avgUnitPriceKobo: number; // authoritative weighted average unit price in integer kobo
   totalCostKobo: number; // authoritative total acquisition cost in integer kobo
   unitPriceKobo?: number; // alias
