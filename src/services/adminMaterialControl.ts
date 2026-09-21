@@ -179,7 +179,7 @@ export async function deleteAdminMaterial(
     ),
   );
 
-  const intentId = `${projectId}__${materialId}`;
+  const intentId = materialId;
   const intentRef = doc(db, 'adminMaterialDeletionIntents', intentId);
   const purchaseIntentRefs = transportPurchaseIds.map((purchaseId) =>
     doc(db, 'adminPurchaseDeletionIntents', purchaseId),
