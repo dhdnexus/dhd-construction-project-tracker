@@ -226,7 +226,7 @@ service cloud.firestore {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if (isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable()) || isAdminContractorReconciliationAuthorized(contractorId);
-      allow delete: if isAdminTransactionDeletionAuthorized('Contractor', contractorId);
+      allow delete: if isExistingDocOwner();
     }
 
     // 7. Labour Payments
