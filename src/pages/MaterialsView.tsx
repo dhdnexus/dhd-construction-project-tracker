@@ -26,6 +26,7 @@ interface MaterialsViewProps {
   stockValue: number;
   lowStockCount: number;
   onOpenPurchaseModal: (initialData?: PurchaseRecord) => void;
+  onOpenMaterialModal: () => void;
   onOpenUsageModal: (defaultMaterialId?: string, initialData?: MaterialUsage) => void;
   onDeletePurchase: (id: string, name: string) => void;
   onDeleteUsage: (id: string, name: string) => void;
@@ -50,6 +51,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   stockValue,
   lowStockCount,
   onOpenPurchaseModal,
+  onOpenMaterialModal,
   onOpenUsageModal,
   onDeletePurchase,
   onDeleteUsage,
@@ -123,6 +125,13 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenMaterialModal}
+              className="h-11 px-4 bg-[#F1F3FF] hover:bg-[#E0E8FF] text-[#081B38] text-xs font-bold rounded-xl flex items-center gap-1.5 border border-[#E0E8FF] transition-colors cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Register Material</span>
+            </button>
             <button
               onClick={() => onOpenPurchaseModal()}
               className="h-11 px-4 bg-[#0F1E36] hover:bg-[#1A2B49] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
