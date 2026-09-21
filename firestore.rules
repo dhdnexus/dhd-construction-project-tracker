@@ -76,11 +76,11 @@ service cloud.firestore {
     function isAdminTransactionDeletionAuthorized(entityType, entityId) {
       return isAdmin() &&
         entityId is string &&
-        exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)) &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.adminUid == request.auth.uid &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.entityType == entityType &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.entityId == entityId &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.projectId == resource.data.projectId;
+        exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityId)) &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityId)).data.adminUid == request.auth.uid &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityId)).data.entityType == entityType &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityId)).data.entityId == entityId &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityId)).data.projectId == resource.data.projectId;
     }
 
     function isAdminMaterialReconciliationAuthorized(materialId) {
@@ -175,6 +175,7 @@ service cloud.firestore {
       allow read: if isAdmin() && resource.data.adminUid == request.auth.uid;
       allow create: if isAdmin() &&
         request.resource.data.entityType is string &&
+        request.resource.data.entityId == intentId &&
         request.resource.data.entityId is string &&
         request.resource.data.adminUid == request.auth.uid &&
         request.resource.data.projectId is string &&
