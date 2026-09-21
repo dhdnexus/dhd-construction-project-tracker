@@ -1360,6 +1360,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deletePurchase(id: string): Promise<void> {
+    throw new Error('Recorded purchase deletion is administrator-controlled. Edit the purchase for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedPurchases.find((p) => p.id === id);
     this.cachedPurchases = this.cachedPurchases.filter((p) => p.id !== id);
     writeLocalCache(CACHE_KEYS.PURCHASES, this.cachedPurchases);
@@ -1495,6 +1497,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteUsage(id: string): Promise<void> {
+    throw new Error('Recorded material usage deletion is administrator-controlled. Edit the usage record for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedUsage.find((u) => u.id === id);
     this.cachedUsage = this.cachedUsage.filter((u) => u.id !== id);
     writeLocalCache(CACHE_KEYS.USAGE, this.cachedUsage);
@@ -1714,6 +1718,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteWorkProgress(id: string): Promise<void> {
+    throw new Error('Recorded work-progress deletion is administrator-controlled. Edit the work stream for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedWorkProgress.find((w) => w.id === id);
     this.cachedWorkProgress = this.cachedWorkProgress.filter((w) => w.id !== id);
     writeLocalCache(CACHE_KEYS.WORK_PROGRESS, this.cachedWorkProgress);
@@ -1941,6 +1947,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteLabourPayment(id: string): Promise<void> {
+    throw new Error('Recorded labour-payment deletion is administrator-controlled. Edit the payment for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedLabourPayments.find((p) => p.id === id);
     this.cachedLabourPayments = this.cachedLabourPayments.filter((p) => p.id !== id);
     writeLocalCache(CACHE_KEYS.LABOUR_PAYMENTS, this.cachedLabourPayments);
@@ -2091,6 +2099,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteTransportation(id: string): Promise<void> {
+    throw new Error('Recorded transportation deletion is administrator-controlled. Edit the record for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedTransportation.find((r) => r.id === id);
     this.cachedTransportation = this.cachedTransportation.filter((r) => r.id !== id);
     writeLocalCache(CACHE_KEYS.TRANSPORTATION, this.cachedTransportation);
@@ -2188,6 +2198,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteOtherExpense(id: string): Promise<void> {
+    throw new Error('Recorded expense deletion is administrator-controlled. Edit the expense for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedOtherExpenses.find((e) => e.id === id);
     this.cachedOtherExpenses = this.cachedOtherExpenses.filter((e) => e.id !== id);
     writeLocalCache(CACHE_KEYS.OTHER_EXPENSES, this.cachedOtherExpenses);
