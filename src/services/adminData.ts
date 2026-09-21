@@ -2,6 +2,7 @@ import {
   collection,
   getDocs,
   limit,
+  orderBy,
   query,
   where,
 } from 'firebase/firestore';
@@ -189,7 +190,7 @@ export async function loadAdminOverview(): Promise<AdminOverview> {
   const [usersSnapshot, projectsSnapshot, auditSnapshot] = await Promise.all([
     getDocs(query(collection(db, 'userProfiles'), limit(ADMIN_QUERY_LIMIT))),
     getDocs(query(collection(db, 'projects'), limit(ADMIN_QUERY_LIMIT))),
-    getDocs(query(collection(db, 'auditEvents'), limit(ADMIN_QUERY_LIMIT))),
+    getDocs(query(collection(db, 'auditEvents'), orderBy('timestamp', 'desc'), limit(ADMIN_QUERY_LIMIT))),
   ]);
 
   const users = usersSnapshot.docs
