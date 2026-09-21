@@ -15,6 +15,7 @@ import {
   DollarSign,
   User,
   CheckCircle2,
+  LockKeyhole,
 } from 'lucide-react';
 import { Material, PurchaseRecord, MaterialUsage, MaterialCategory } from '../types';
 import { formatNaira, formatDate, formatNumber } from '../utils/formatters';
@@ -26,6 +27,7 @@ interface MaterialsViewProps {
   stockValue: number;
   lowStockCount: number;
   onOpenPurchaseModal: (initialData?: PurchaseRecord) => void;
+  onOpenMaterialModal: () => void;
   onOpenUsageModal: (defaultMaterialId?: string, initialData?: MaterialUsage) => void;
   onDeletePurchase: (id: string, name: string) => void;
   onDeleteUsage: (id: string, name: string) => void;
@@ -50,6 +52,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   stockValue,
   lowStockCount,
   onOpenPurchaseModal,
+  onOpenMaterialModal,
   onOpenUsageModal,
   onDeletePurchase,
   onDeleteUsage,
@@ -123,6 +126,13 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={onOpenMaterialModal}
+              className="h-11 px-4 bg-[#F1F3FF] hover:bg-[#E0E8FF] text-[#081B38] text-xs font-bold rounded-xl flex items-center gap-1.5 border border-[#E0E8FF] transition-colors cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Register Material</span>
+            </button>
             <button
               onClick={() => onOpenPurchaseModal()}
               className="h-11 px-4 bg-[#0F1E36] hover:bg-[#1A2B49] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
@@ -228,8 +238,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredMaterials.map((mat) => {
-                const isLow = mat.remaining > 0 && mat.remaining <= 10;
-                const isDepleted = mat.remaining === 0;
+                const hasPurchaseHistory = purchases.some((p) => p.materialId === mat.id);
+                const lowStockThreshold = Number(mat.lowStockThreshold || 0);
+                const isLow = lowStockThreshold > 0 && mat.remaining > 0 && mat.remaining <= lowStockThreshold;
+                const isDepleted = mat.totalPurchased > 0 && mat.remaining === 0;
                 const usagePercent =
                   mat.totalPurchased > 0
                     ? Math.round((mat.totalUsed / mat.totalPurchased) * 100)
@@ -337,13 +349,22 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                         <span>Log Usage</span>
                       </button>
 
-                      <button
-                        onClick={() => onDeleteMaterial(mat.id, mat.name)}
-                        title="Delete Material"
-                        className="w-8 h-8 rounded-lg text-[#75777E] hover:text-[#BA1A1A] hover:bg-[#FFDAD6] flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {hasPurchaseHistory ? (
+                        <div
+                          title="Material has purchase history. Administrator action required."
+                          className="w-8 h-8 rounded-lg text-[#6B46C1] bg-[#F1F3FF] flex items-center justify-center"
+                        >
+                          <LockKeyhole size={15} />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => onDeleteMaterial(mat.id, mat.name)}
+                          title="Delete unused material"
+                          className="w-8 h-8 rounded-lg text-[#75777E] hover:text-[#BA1A1A] hover:bg-[#FFDAD6] flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

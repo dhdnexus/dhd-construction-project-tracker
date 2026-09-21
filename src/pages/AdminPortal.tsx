@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, ArrowLeft, LockKeyhole, LogIn, LogOut, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ArrowLeft, Eye, EyeOff, LockKeyhole, LogIn, LogOut, ShieldCheck } from 'lucide-react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '../firebase';
 import { AppLogo } from '../components/common/AppLogo';
+import { AdminControlCentre } from './AdminControlCentre';
 import { getCurrentAdmin, signInAdmin, signOutAdmin, AdminProfile } from '../services/adminAuth';
 
 export const AdminPortal: React.FC = () => {
@@ -10,6 +11,7 @@ export const AdminPortal: React.FC = () => {
   const [checkingSession, setCheckingSession] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,6 +107,10 @@ export const AdminPortal: React.FC = () => {
     );
   }
 
+  if (admin) {
+    return <AdminControlCentre admin={admin} onSignOut={handleSignOut} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#F9F9FF] text-[#081B38] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -121,57 +127,7 @@ export const AdminPortal: React.FC = () => {
             </div>
           </div>
 
-          {admin ? (
-            <div className="p-6 space-y-5">
-              <div className="p-4 rounded-xl bg-[#F1F3FF] border border-[#E0E8FF]">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
-                  <ShieldCheck size={16} />
-                  Administrator authenticated
-                </div>
-                <div className="mt-3 space-y-2">
-                  <div>
-                    <span className="block text-[10px] uppercase font-bold text-[#75777E]">Email</span>
-                    <span className="text-sm font-semibold">{admin.email}</span>
-                  </div>
-                  {admin.displayName && (
-                    <div>
-                      <span className="block text-[10px] uppercase font-bold text-[#75777E]">Name</span>
-                      <span className="text-sm font-semibold">{admin.displayName}</span>
-                    </div>
-                  )}
-                  <div>
-                    <span className="block text-[10px] uppercase font-bold text-[#75777E]">Role</span>
-                    <span className="text-sm font-semibold">Administrator</span>
-                  </div>
-                </div>
-              </div>
-
-              <p className="text-xs leading-relaxed text-[#75777E]">
-                The administrator authentication boundary is active. Administrative modules can be added here without exposing administrator registration to regular users.
-              </p>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => { window.location.href = '/'; }}
-                  className="h-11 rounded-xl bg-[#F1F3FF] hover:bg-[#E8EDFF] text-[#081B38] text-xs font-bold flex items-center justify-center gap-2"
-                >
-                  <ArrowLeft size={15} />
-                  Return to Tracker
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  disabled={loading}
-                  className="h-11 rounded-xl bg-[#000412] hover:bg-[#0F1E36] text-white text-xs font-bold flex items-center justify-center gap-2"
-                >
-                  <LogOut size={15} />
-                  {loading ? 'Signing out...' : 'Sign Out'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="p-6">
+          <div className="p-6">
               {error && (
                 <div className="mb-4 p-3 rounded-xl bg-[#FFDAD6] text-[#BA1A1A] text-xs font-semibold flex items-start gap-2 border border-[#FF5449]/30">
                   <AlertCircle size={16} className="shrink-0 mt-0.5" />
@@ -208,14 +164,25 @@ export const AdminPortal: React.FC = () => {
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-[#44474D] mb-1">
                     Password
                   </label>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    className="w-full h-11 px-3 text-xs bg-[#F9F9FF] border border-[#E8EDFF] rounded-xl focus:outline-none focus:border-[#081B38]"
-                    placeholder="••••••••"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      className="w-full h-11 pl-3 pr-11 text-xs bg-[#F9F9FF] border border-[#E8EDFF] rounded-xl focus:outline-none focus:border-[#081B38]"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((visible) => !visible)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute inset-y-0 right-0 w-11 flex items-center justify-center text-[#75777E] hover:text-[#081B38]"
+                    >
+                      {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
@@ -236,8 +203,7 @@ export const AdminPortal: React.FC = () => {
                 <ArrowLeft size={14} />
                 Return to regular user access
               </button>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

@@ -779,15 +779,42 @@ export class ConstructionTrackerService {
     try {
       const ref = doc(db, 'projects', projectId);
       await setDoc(ref, newProject);
-      await this.recordAuditEvent(
-        'CREATE',
-        'ProjectSettings',
+
+      // Audit the creation against the newly-created project rather than relying
+      // on whichever project happened to be active before creation.
+      const event: AuditEvent = {
+        id: `aud_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        timestamp: new Date().toISOString(),
+        action: 'CREATE',
+        entityType: 'ProjectSettings',
+        entity: 'ProjectSettings',
+        entityId: projectId,
+        user: this.getUserEmail(),
+        userEmail: this.getUserEmail(),
+        ownerId,
         projectId,
-        `Created project: ${newProject.name} (${newProject.code})`
-      );
+        details: `Created project: ${newProject.name} (${newProject.code})`,
+        summary: `Created project: ${newProject.name} (${newProject.code})`,
+      };
+      this.cachedAuditEvents.unshift(event);
+      if (this.cachedAuditEvents.length > 50) this.cachedAuditEvents.pop();
+      writeLocalCache(CACHE_KEYS.AUDIT_EVENTS, this.cachedAuditEvents);
+      await setDoc(doc(db, 'auditEvents', event.id), event);
+
       this.syncStatus = 'synced';
       this.lastError = null;
     } catch (err: any) {
+      // Never leave a project-looking local cache entry behind when its
+      // Firestore write fails; that creates a misleading phantom workspace.
+      this.cachedProjects = this.cachedProjects.filter((p) => p.id !== projectId);
+      writeLocalCache(CACHE_KEYS.PROJECTS, this.cachedProjects);
+      if (this.activeProjectId === projectId) {
+        this.activeProjectId = '';
+        this.cachedProject = null;
+        writeLocalCache(CACHE_KEYS.ACTIVE_PROJECT_ID, '');
+        writeLocalCache(CACHE_KEYS.PROJECT, null);
+      }
+
       console.warn('Failed to save project to Firestore:', err);
       this.syncStatus = 'error';
       this.lastError = err?.message || 'Failed to create project in database';
@@ -990,6 +1017,18 @@ export class ConstructionTrackerService {
       if (displayName && res.user) {
         await updateProfile(res.user, { displayName });
       }
+
+      // Persist a non-privileged user profile so registered accounts are visible
+      // to the administrator control centre. Administrator profiles are provisioned
+      // separately and cannot be created through this client flow.
+      await setDoc(doc(db, 'userProfiles', res.user.uid), {
+        email: res.user.email,
+        displayName: displayName?.trim() || res.user.displayName || null,
+        role: 'user',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
       this.currentUser = res.user;
       this.setupFirestoreSubscriptions(res.user.uid);
       this.syncStatus = 'synced';
@@ -1126,6 +1165,15 @@ export class ConstructionTrackerService {
 
   public static async deleteMaterial(id: string): Promise<void> {
     const target = this.cachedMaterials.find((m) => m.id === id);
+    if (!target) {
+      throw new Error('Material not found in the active project.');
+    }
+
+    const hasPurchaseHistory = this.cachedPurchases.some((purchase) => purchase.materialId === id);
+    if (hasPurchaseHistory || target.totalPurchased > 0 || target.totalUsed > 0) {
+      throw new Error('This material has transaction history and can only be removed through the administrator workflow.');
+    }
+
     this.cachedMaterials = this.cachedMaterials.filter((m) => m.id !== id);
     writeLocalCache(CACHE_KEYS.MATERIALS, this.cachedMaterials);
     this.syncStatus = 'saving';
@@ -1312,6 +1360,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deletePurchase(id: string): Promise<void> {
+    throw new Error('Recorded purchase deletion is administrator-controlled. Edit the purchase for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedPurchases.find((p) => p.id === id);
     this.cachedPurchases = this.cachedPurchases.filter((p) => p.id !== id);
     writeLocalCache(CACHE_KEYS.PURCHASES, this.cachedPurchases);
@@ -1447,6 +1497,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteUsage(id: string): Promise<void> {
+    throw new Error('Recorded material usage deletion is administrator-controlled. Edit the usage record for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedUsage.find((u) => u.id === id);
     this.cachedUsage = this.cachedUsage.filter((u) => u.id !== id);
     writeLocalCache(CACHE_KEYS.USAGE, this.cachedUsage);
@@ -1666,6 +1718,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteWorkProgress(id: string): Promise<void> {
+    throw new Error('Recorded work-progress deletion is administrator-controlled. Edit the work stream for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedWorkProgress.find((w) => w.id === id);
     this.cachedWorkProgress = this.cachedWorkProgress.filter((w) => w.id !== id);
     writeLocalCache(CACHE_KEYS.WORK_PROGRESS, this.cachedWorkProgress);
@@ -1893,6 +1947,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteLabourPayment(id: string): Promise<void> {
+    throw new Error('Recorded labour-payment deletion is administrator-controlled. Edit the payment for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedLabourPayments.find((p) => p.id === id);
     this.cachedLabourPayments = this.cachedLabourPayments.filter((p) => p.id !== id);
     writeLocalCache(CACHE_KEYS.LABOUR_PAYMENTS, this.cachedLabourPayments);
@@ -2043,6 +2099,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteTransportation(id: string): Promise<void> {
+    throw new Error('Recorded transportation deletion is administrator-controlled. Edit the record for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedTransportation.find((r) => r.id === id);
     this.cachedTransportation = this.cachedTransportation.filter((r) => r.id !== id);
     writeLocalCache(CACHE_KEYS.TRANSPORTATION, this.cachedTransportation);
@@ -2140,6 +2198,8 @@ export class ConstructionTrackerService {
   }
 
   public static async deleteOtherExpense(id: string): Promise<void> {
+    throw new Error('Recorded expense deletion is administrator-controlled. Edit the expense for ordinary corrections, or use the administrator workflow for permanent removal.');
+
     const target = this.cachedOtherExpenses.find((e) => e.id === id);
     this.cachedOtherExpenses = this.cachedOtherExpenses.filter((e) => e.id !== id);
     writeLocalCache(CACHE_KEYS.OTHER_EXPENSES, this.cachedOtherExpenses);
@@ -2325,7 +2385,10 @@ export class ConstructionTrackerService {
       0
     );
     const stockInStoreValue = fromKobo(stockInStoreValueKobo);
-    const lowStockCount = materials.filter((m) => m.remaining > 0 && m.remaining <= 10).length;
+    const lowStockCount = materials.filter((m) => {
+      const threshold = Number(m.lowStockThreshold || 0);
+      return threshold > 0 && m.remaining > 0 && m.remaining <= threshold;
+    }).length;
     const depletedCount = materials.filter((m) => m.remaining === 0).length;
 
     // 11. Category Budgets Matrix
