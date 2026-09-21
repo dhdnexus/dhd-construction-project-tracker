@@ -358,7 +358,7 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
             <h2 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight">Administrator Control Centre</h2>
             <p className="mt-2 text-sm text-[#75777E] max-w-2xl">
               Cross-project visibility for registered users, construction workspaces, and the append-only audit stream.
-              This first slice is read-only; administrative mutations will be introduced through explicit, separately secured workflows.
+              Administrative material removal is available only through an explicit, separately secured workflow.
             </p>
           </div>
           <button
