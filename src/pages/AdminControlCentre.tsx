@@ -27,7 +27,8 @@ import {
   loadAdminProjectIntelligence,
 } from '../services/adminData';
 import { formatDate, formatNairaCompact } from '../utils/formatters';
-import { AppLogo } from '../components/common/AppLogo';\nimport { loadAdminProjectMaterials, deleteAdminMaterial, AdminMaterialRecord } from '../services/adminMaterialControl';
+import { AppLogo } from '../components/common/AppLogo';
+import { loadAdminProjectMaterials, deleteAdminMaterial, AdminMaterialRecord } from '../services/adminMaterialControl';
 
 type AdminTab = 'overview' | 'projects' | 'users' | 'audit';
 
@@ -221,7 +222,11 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
   const [error, setError] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [projectIntelligence, setProjectIntelligence] = useState<AdminProjectIntelligence | null>(null);
-  const [projectLoading, setProjectLoading] = useState(false);\n  const [projectMaterials, setProjectMaterials] = useState<AdminMaterialRecord[]>([]);\n  const [materialsLoading, setMaterialsLoading] = useState(false);\n  const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(null);\n  const [pendingDeleteMaterial, setPendingDeleteMaterial] = useState<AdminMaterialRecord | null>(null);
+  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectMaterials, setProjectMaterials] = useState<AdminMaterialRecord[]>([]);
+  const [materialsLoading, setMaterialsLoading] = useState(false);
+  const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(null);
+  const [pendingDeleteMaterial, setPendingDeleteMaterial] = useState<AdminMaterialRecord | null>(null);
 
   const selectProject = useCallback(async (project: AdminProjectRecord) => {
     setSelectedProjectId(project.id);
@@ -267,7 +272,6 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
       );
       setPendingDeleteMaterial(null);
       await refreshSelectedProject(selectedProjectId);
-      await load(false);
       setError(null);
       window.alert(
         `Material removed. Deleted ${result.deletedPurchases} purchase record(s), ${result.deletedUsage} usage record(s), and ${result.deletedTransport} linked transport record(s).`,
@@ -277,7 +281,7 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
     } finally {
       setDeletingMaterialId(null);
     }
-  }, [admin.email, admin.uid, load, pendingDeleteMaterial, refreshSelectedProject, selectedProjectId]);
+  }, [admin.email, admin.uid, pendingDeleteMaterial, refreshSelectedProject, selectedProjectId]);
 
   const load = useCallback(async (initial = false) => {
     if (initial) setLoading(true);
