@@ -15,6 +15,7 @@ import {
   DollarSign,
   User,
   CheckCircle2,
+  LockKeyhole,
 } from 'lucide-react';
 import { Material, PurchaseRecord, MaterialUsage, MaterialCategory } from '../types';
 import { formatNaira, formatDate, formatNumber } from '../utils/formatters';
@@ -237,8 +238,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredMaterials.map((mat) => {
-                const isLow = mat.remaining > 0 && mat.remaining <= 10;
-                const isDepleted = mat.remaining === 0;
+                const hasPurchaseHistory = purchases.some((p) => p.materialId === mat.id);
+                const lowStockThreshold = Number(mat.lowStockThreshold || 0);
+                const isLow = lowStockThreshold > 0 && mat.remaining > 0 && mat.remaining <= lowStockThreshold;
+                const isDepleted = mat.totalPurchased > 0 && mat.remaining === 0;
                 const usagePercent =
                   mat.totalPurchased > 0
                     ? Math.round((mat.totalUsed / mat.totalPurchased) * 100)
@@ -346,13 +349,22 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                         <span>Log Usage</span>
                       </button>
 
-                      <button
-                        onClick={() => onDeleteMaterial(mat.id, mat.name)}
-                        title="Delete Material"
-                        className="w-8 h-8 rounded-lg text-[#75777E] hover:text-[#BA1A1A] hover:bg-[#FFDAD6] flex items-center justify-center transition-colors cursor-pointer"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {hasPurchaseHistory ? (
+                        <div
+                          title="Material has purchase history. Administrator action required."
+                          className="w-8 h-8 rounded-lg text-[#6B46C1] bg-[#F1F3FF] flex items-center justify-center"
+                        >
+                          <LockKeyhole size={15} />
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => onDeleteMaterial(mat.id, mat.name)}
+                          title="Delete unused material"
+                          className="w-8 h-8 rounded-lg text-[#75777E] hover:text-[#BA1A1A] hover:bg-[#FFDAD6] flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
