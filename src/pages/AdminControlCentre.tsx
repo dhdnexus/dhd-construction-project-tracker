@@ -15,6 +15,9 @@ import {
   RefreshCw,
   ShieldCheck,
   Users,
+  Trash2,
+  ShieldAlert,
+  X,
 } from 'lucide-react';
 import { AdminProfile } from '../services/adminAuth';
 import {
