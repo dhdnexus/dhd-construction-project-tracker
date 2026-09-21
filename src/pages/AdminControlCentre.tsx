@@ -344,6 +344,14 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
     } catch (err: any) {
       setProjectIntelligence(null);
       setProjectMaterials([]);
+      setTransactions({
+        purchases: [],
+        usage: [],
+        labourPayments: [],
+        transportation: [],
+        otherExpenses: [],
+        workProgress: [],
+      });
       setError(err?.message || 'Unable to load project intelligence.');
     } finally {
       setProjectLoading(false);
