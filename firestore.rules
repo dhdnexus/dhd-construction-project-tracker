@@ -96,7 +96,9 @@ service cloud.firestore {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isExistingDocOwner();
+      allow delete: if isAdmin() || (isExistingDocOwner() &&
+        resource.data.totalPurchased == 0 &&
+        resource.data.totalUsed == 0);
     }
 
     // 4. Purchases
