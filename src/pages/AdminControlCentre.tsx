@@ -329,6 +329,7 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
   const selectProject = useCallback(async (project: AdminProjectRecord) => {
     setSelectedProjectId(project.id);
     setProjectLoading(true);
+    setTransactionsLoading(true);
     setError(null);
     try {
       setMaterialsLoading(true);
@@ -347,6 +348,7 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
     } finally {
       setProjectLoading(false);
       setMaterialsLoading(false);
+      setTransactionsLoading(false);
     }
   }, []);
 
