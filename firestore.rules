@@ -55,7 +55,9 @@ service cloud.firestore {
     }
 
     function isAdminMaterialDeletionAuthorized(projId, materialId) {
-      return isAdmin() &&
+      return projId is string &&
+        materialId is string &&
+        isAdmin() &&
         exists(/databases/$(database)/documents/adminMaterialDeletionIntents/$(materialId)) &&
         get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(materialId)).data.adminUid == request.auth.uid &&
         get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(materialId)).data.projectId == projId &&
@@ -142,7 +144,7 @@ service cloud.firestore {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if (isAdmin() && isAdminMaterialDeletionAuthorized(resource.data.projectId, materialId)) ||
+      allow delete: if isAdminMaterialDeletionAuthorized(resource.data.projectId, materialId) ||
         (isExistingDocOwner() &&
         resource.data.totalPurchased == 0 &&
         resource.data.totalUsed == 0);
@@ -160,7 +162,7 @@ service cloud.firestore {
         isOwnerImmutable() &&
         isProjectImmutable() &&
         isValidProjectMaterial(request.resource.data.materialId, request.resource.data.projectId);
-      allow delete: if isExistingDocOwner() || (isAdmin() && isAdminMaterialDeletionAuthorized(resource.data.projectId, resource.data.materialId));
+      allow delete: if isExistingDocOwner() || isAdminMaterialDeletionAuthorized(resource.data.projectId, resource.data.materialId);
     }
 
     // 6. Material Usage
@@ -169,7 +171,7 @@ service cloud.firestore {
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner() ||
-        (isAdmin() && isAdminMaterialDeletionAuthorized(resource.data.projectId, resource.data.materialId));
+        isAdminMaterialDeletionAuthorized(resource.data.projectId, resource.data.materialId);
     }
 
     // 6. Contractors
@@ -194,7 +196,7 @@ service cloud.firestore {
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
       allow delete: if isExistingDocOwner() ||
-        (isAdmin() && resource.data.purchaseId is string && isAdminPurchaseDeletionAuthorized(resource.data.purchaseId));
+        (resource.data.purchaseId is string && isAdminPurchaseDeletionAuthorized(resource.data.purchaseId));
     }
 
     // 9. Other Site Expenses
