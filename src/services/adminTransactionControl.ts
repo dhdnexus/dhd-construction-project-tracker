@@ -210,7 +210,7 @@ async function createIntent(
   adminUid: string,
   extra: Record<string, unknown> = {},
 ): Promise<void> {
-  await setDoc(doc(db, 'adminTransactionDeletionIntents', `${entityType}_${entityId}`), {
+  await setDoc(doc(db, 'adminTransactionDeletionIntents', entityId), {
     entityType,
     entityId,
     projectId,
@@ -222,7 +222,7 @@ async function createIntent(
 }
 
 async function deleteIntent(entityType: AdminTransactionEntity, entityId: string): Promise<void> {
-  await deleteDoc(doc(db, 'adminTransactionDeletionIntents', `${entityType}_${entityId}`)).catch(() => undefined);
+  await deleteDoc(doc(db, 'adminTransactionDeletionIntents', entityId)).catch(() => undefined);
 }
 
 async function createReconciliationIntent(
