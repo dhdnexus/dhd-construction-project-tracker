@@ -373,9 +373,13 @@ export default function App() {
                   message:
                     'Are you sure you want to remove this material item from the site inventory registry?',
                   itemName: name,
-                  onConfirm: () => {
-                    deleteMaterial(id);
-                    showToast('Material removed from registry.');
+                  onConfirm: async () => {
+                    try {
+                      await deleteMaterial(id);
+                      showToast('Unused material removed from registry.');
+                    } catch (err: any) {
+                      showToast(err?.message || 'Material could not be removed.');
+                    }
                   },
                 });
               }}
