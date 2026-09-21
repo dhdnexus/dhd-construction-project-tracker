@@ -304,6 +304,10 @@ async function reconcileMaterial(
     getDocs(query(collection(db, 'materialUsage'), where('projectId', '==', projectId), where('materialId', '==', materialId), limit(QUERY_LIMIT))),
   ]);
 
+  if (purchasesSnapshot.size >= QUERY_LIMIT || usageSnapshot.size >= QUERY_LIMIT) {
+    throw new Error('Material reconciliation reached the 500-record client safety limit. Use the larger-scale administrative deletion workflow.');
+  }
+
   const totalPurchased = purchasesSnapshot.docs.reduce((sum, snapshot) => sum + numberValue(snapshot.data().quantity), 0);
   const totalUsed = usageSnapshot.docs.reduce((sum, snapshot) => sum + numberValue(snapshot.data().quantityUsed), 0);
   const totalMaterialCostKobo = purchasesSnapshot.docs.reduce(
@@ -346,6 +350,10 @@ async function reconcileContractor(
     where('contractorId', '==', contractorId),
     limit(QUERY_LIMIT),
   ));
+
+  if (paymentsSnapshot.size >= QUERY_LIMIT) {
+    throw new Error('Contractor reconciliation reached the 500-payment client safety limit. Use the larger-scale administrative deletion workflow.');
+  }
 
   const totalPaidKobo = paymentsSnapshot.docs.reduce(
     (sum, snapshot) => sum + koboValue(snapshot.data(), 'amountKobo', 'amount'),
@@ -449,6 +457,10 @@ export async function deleteAdminPurchase(
     where('purchaseId', '==', purchaseId),
     limit(QUERY_LIMIT),
   ));
+
+  if (transportSnapshot.size >= QUERY_LIMIT) {
+    throw new Error('This purchase has 500 or more linked transport records. Use the larger-scale administrative deletion workflow.');
+  }
 
   await createIntent('Purchase', purchaseId, projectId, project.ownerId, adminUid, {
     reconciliationMaterialId: typeof purchase.materialId === 'string' ? purchase.materialId : '',
