@@ -73,6 +73,31 @@ service cloud.firestore {
         get(/databases/$(database)/documents/adminPurchaseDeletionIntents/$(purchaseId)).data.entityType == 'AdminPurchaseDeletionIntent';
     }
 
+    function isAdminTransactionDeletionAuthorized(entityType, entityId) {
+      return isAdmin() &&
+        entityId is string &&
+        exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)) &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.adminUid == request.auth.uid &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.entityType == entityType &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.entityId == entityId;
+    }
+
+    function isAdminMaterialReconciliationAuthorized(materialId) {
+      return isAdmin() &&
+        materialId is string &&
+        exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$(materialId)) &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(materialId)).data.adminUid == request.auth.uid &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(materialId)).data.reconciliationMaterialId == materialId;
+    }
+
+    function isAdminContractorReconciliationAuthorized(contractorId) {
+      return isAdmin() &&
+        contractorId is string &&
+        exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$(contractorId)) &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(contractorId)).data.adminUid == request.auth.uid &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(contractorId)).data.reconciliationContractorId == contractorId;
+    }
+
     // 0. User profiles
     // Regular accounts may create their own profile only with the non-privileged user role.
     // Administrator profiles are provisioned outside the client application.
@@ -139,11 +164,30 @@ service cloud.firestore {
       allow delete: if isAdmin() && resource.data.adminUid == request.auth.uid;
     }
 
+    // 3c. Administrator transaction deletion intents.
+    // Destructive removal of recorded financial/operational history requires an
+    // explicit administrator intent. The client creates the intent immediately
+    // before the destructive write and removes it after completion.
+    match /adminTransactionDeletionIntents/{intentId} {
+      allow read: if isAdmin() && resource.data.adminUid == request.auth.uid;
+      allow create: if isAdmin() &&
+        request.resource.data.entityType is string &&
+        request.resource.data.entityId is string &&
+        request.resource.data.adminUid == request.auth.uid &&
+        request.resource.data.projectId is string &&
+        request.resource.data.ownerId is string &&
+        exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+        get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.ownerId == request.resource.data.ownerId;
+      allow update: if false;
+      allow delete: if isAdmin() && resource.data.adminUid == request.auth.uid;
+    }
+
     // 4. Materials
     match /materials/{materialId} {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
-      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
+      allow update: if (isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable()) ||
+        isAdminMaterialReconciliationAuthorized(materialId);
       allow delete: if isAdminMaterialDeletionAuthorized(resource.data.projectId, materialId) ||
         (isExistingDocOwner() &&
         resource.data.totalPurchased == 0 &&
@@ -170,16 +214,15 @@ service cloud.firestore {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isExistingDocOwner() ||
-        isAdminMaterialDeletionAuthorized(resource.data.projectId, resource.data.materialId);
+      allow delete: if isAdminTransactionDeletionAuthorized('Purchase', purchaseId);
     }
 
     // 6. Contractors
     match /contractors/{contractorId} {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
-      allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isExistingDocOwner();
+      allow update: if (isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable()) || isAdminContractorReconciliationAuthorized(contractorId);
+      allow delete: if isAdminTransactionDeletionAuthorized('Contractor', contractorId);
     }
 
     // 7. Labour Payments
@@ -187,7 +230,7 @@ service cloud.firestore {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isExistingDocOwner();
+      allow delete: if isAdminTransactionDeletionAuthorized('LabourPayment', paymentId);
     }
 
     // 9. Transportation & Haulage
@@ -195,7 +238,7 @@ service cloud.firestore {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isExistingDocOwner() ||
+      allow delete: if isAdminTransactionDeletionAuthorized('Transportation', transportId) ||
         (resource.data.purchaseId is string && isAdminPurchaseDeletionAuthorized(resource.data.purchaseId));
     }
 
@@ -204,7 +247,7 @@ service cloud.firestore {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isExistingDocOwner();
+      allow delete: if isAdminTransactionDeletionAuthorized('OtherExpense', expenseId);
     }
 
     // 10. Work Progress Milestones
@@ -212,7 +255,7 @@ service cloud.firestore {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isExistingDocOwner();
+      allow delete: if isAdminTransactionDeletionAuthorized('WorkProgress', progressId);
     }
 
     // 11. Category Budgets
