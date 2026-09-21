@@ -17,6 +17,7 @@ export const MaterialModal: React.FC<MaterialModalProps> = ({ isOpen, onClose, o
   const [name, setName] = useState('');
   const [category, setCategory] = useState<MaterialCategory>('Tiles');
   const [unit, setUnit] = useState('boxes');
+  const [lowStockThreshold, setLowStockThreshold] = useState('0');
   const [supplier, setSupplier] = useState('');
   const [lotNumber, setLotNumber] = useState('');
   const [notes, setNotes] = useState('');
@@ -30,6 +31,7 @@ export const MaterialModal: React.FC<MaterialModalProps> = ({ isOpen, onClose, o
     setName('');
     setCategory('Tiles');
     setUnit('boxes');
+    setLowStockThreshold('0');
     setSupplier('');
     setLotNumber('');
     setNotes('');
@@ -42,9 +44,14 @@ export const MaterialModal: React.FC<MaterialModalProps> = ({ isOpen, onClose, o
     const trimmedName = name.trim();
     const trimmedUnit = unit.trim();
     const trimmedSupplier = supplier.trim();
+    const threshold = Number(lowStockThreshold);
 
     if (!trimmedName || !trimmedUnit || !trimmedSupplier) {
       setError('Material name, unit of measure, and supplier/merchant are required.');
+      return;
+    }
+    if (!Number.isFinite(threshold) || threshold < 0) {
+      setError('Low-stock threshold must be zero or a positive number.');
       return;
     }
 
@@ -58,6 +65,7 @@ export const MaterialModal: React.FC<MaterialModalProps> = ({ isOpen, onClose, o
         supplier: trimmedSupplier,
         ...(lotNumber.trim() ? { lotNumber: lotNumber.trim() } : {}),
         ...(notes.trim() ? { notes: notes.trim() } : {}),
+        lowStockThreshold: threshold,
         totalPurchased: 0,
         totalUsed: 0,
         remaining: 0,
@@ -115,6 +123,19 @@ export const MaterialModal: React.FC<MaterialModalProps> = ({ isOpen, onClose, o
             <div>
               <label className="block text-[10px] uppercase tracking-wider font-bold text-[#44474D] mb-1.5">Unit of measure *</label>
               <input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="boxes, bags, litres..." className="w-full h-10 px-3 text-xs bg-[#F9F9FF] border border-[#E8EDFF] rounded-xl focus:outline-none focus:border-[#081B38]" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] uppercase tracking-wider font-bold text-[#44474D] mb-1.5">Low-stock / reorder level</label>
+              <input type="number" min="0" step="0.01" value={lowStockThreshold} onChange={(e) => setLowStockThreshold(e.target.value)} placeholder="0 = no warning" className="w-full h-10 px-3 text-xs bg-[#F9F9FF] border border-[#E8EDFF] rounded-xl focus:outline-none focus:border-[#081B38]" />
+              <p className="mt-1 text-[9px] text-[#75777E]">Warn when remaining stock reaches this level.</p>
+            </div>
+            <div className="flex items-end">
+              <div className="w-full rounded-xl bg-[#F1F3FF] border border-[#E8EDFF] px-3 py-2.5 text-[10px] text-[#44474D]">
+                Set this according to the site's expected consumption and replenishment cycle.
+              </div>
             </div>
           </div>
 
