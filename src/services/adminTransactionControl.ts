@@ -90,6 +90,17 @@ export async function loadAdminProjectTransactions(projectId: string): Promise<A
     loadCollection(projectId, 'workProgress'),
   ]);
 
+  if (
+    purchasesSnapshot.size >= QUERY_LIMIT ||
+    usageSnapshot.size >= QUERY_LIMIT ||
+    labourPaymentsSnapshot.size >= QUERY_LIMIT ||
+    transportationSnapshot.size >= QUERY_LIMIT ||
+    otherExpensesSnapshot.size >= QUERY_LIMIT ||
+    workProgressSnapshot.size >= QUERY_LIMIT
+  ) {
+    throw new Error('This project has reached the 500-record administrator registry limit for at least one transaction type. Use the larger-scale administrative workflow.');
+  }
+
   const transportByPurchase = new Map<string, number>();
   transportationSnapshot.docs.forEach((snapshot) => {
     const purchaseId = snapshot.data().purchaseId;
