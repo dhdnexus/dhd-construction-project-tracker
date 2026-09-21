@@ -13,6 +13,7 @@ import {
 import { db } from '../firebase';
 
 const QUERY_LIMIT = 500;
+const RULE_SAFE_TRANSPORT_BATCH_SIZE = 4;
 
 export type AdminTransactionEntity =
   | 'Purchase'
@@ -223,6 +224,16 @@ async function createIntent(
 
 async function deleteIntent(entityType: AdminTransactionEntity, entityId: string): Promise<void> {
   await deleteDoc(doc(db, 'adminTransactionDeletionIntents', entityId)).catch(() => undefined);
+}
+
+async function commitRuleSafeDeletes(refs: ReturnType<typeof doc>[]): Promise<void> {
+  for (let index = 0; index < refs.length; index += RULE_SAFE_TRANSPORT_BATCH_SIZE) {
+    const batch = writeBatch(db);
+    refs
+      .slice(index, index + RULE_SAFE_TRANSPORT_BATCH_SIZE)
+      .forEach((ref) => batch.delete(ref));
+    await batch.commit();
+  }
 }
 
 async function createReconciliationIntent(
@@ -466,8 +477,9 @@ export async function deleteAdminPurchase(
       );
     }
 
+    await commitRuleSafeDeletes(transportSnapshot.docs.map((snapshot) => snapshot.ref));
+
     const batch = writeBatch(db);
-    transportSnapshot.docs.forEach((snapshot) => batch.delete(snapshot.ref));
     batch.delete(purchaseRef);
 
     if (typeof purchase.materialId === 'string' && purchase.materialId) {
