@@ -26,6 +26,7 @@ import { ContractorModal } from './components/modals/ContractorModal';
 import { ConfirmDeleteModal } from './components/modals/ConfirmDeleteModal';
 import { AuthModal } from './components/modals/AuthModal';
 import { ProjectModal } from './components/modals/ProjectModal';
+import { MaterialModal } from './components/modals/MaterialModal';
 
 import {
   PurchaseRecord,
@@ -64,6 +65,7 @@ export default function App() {
     signIn,
     signUp,
     logout,
+    saveMaterial,
     savePurchase,
     deletePurchase,
     saveUsage,
@@ -132,6 +134,7 @@ export default function App() {
   };
 
   // Modals state
+  const [materialModalOpen, setMaterialModalOpen] = useState(false);
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseRecord | null>(null);
 
@@ -331,6 +334,7 @@ export default function App() {
                 setSelectedPurchase(pur || null);
                 setPurchaseModalOpen(true);
               }}
+              onOpenMaterialModal={() => setMaterialModalOpen(true)}
               onOpenUsageModal={(matId, u) => {
                 setSelectedUsage(u || null);
                 setDefaultUsageMaterialId(matId);
@@ -568,6 +572,16 @@ export default function App() {
       <BottomNav currentTab={activeTab} onNavigate={handleNavigate} />
 
       {/* MODALS */}
+      <MaterialModal
+        isOpen={materialModalOpen}
+        onClose={() => setMaterialModalOpen(false)}
+        onSave={async (data) => {
+          await saveMaterial(data);
+          setMaterialModalOpen(false);
+          showToast('Material registered in the site catalogue.');
+        }}
+      />
+
       <PurchaseModal
         isOpen={purchaseModalOpen}
         onClose={() => setPurchaseModalOpen(false)}
