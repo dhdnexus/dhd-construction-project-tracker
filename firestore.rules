@@ -54,6 +54,23 @@ service cloud.firestore {
         get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function isAdminMaterialDeletionAuthorized(projId, materialId) {
+      return isAdmin() &&
+        exists(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)) &&
+        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)).data.adminUid == request.auth.uid &&
+        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)).data.projectId == projId &&
+        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)).data.materialId == materialId &&
+        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)).data.entityType == 'AdminMaterialDeletionIntent';
+    }
+
+    function isAdminPurchaseDeletionAuthorized(purchaseId) {
+      return isAdmin() &&
+        exists(/databases/$(database)/documents/adminPurchaseDeletionIntents/$(purchaseId)) &&
+        get(/databases/$(database)/documents/adminPurchaseDeletionIntents/$(purchaseId)).data.adminUid == request.auth.uid &&
+        get(/databases/$(database)/documents/adminPurchaseDeletionIntents/$(purchaseId)).data.purchaseId == purchaseId &&
+        get(/databases/$(database)/documents/adminPurchaseDeletionIntents/$(purchaseId)).data.entityType == 'AdminPurchaseDeletionIntent';
+    }
+
     // 0. User profiles
     // Regular accounts may create their own profile only with the non-privileged user role.
     // Administrator profiles are provisioned outside the client application.
@@ -91,17 +108,48 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner() && isProjectDeletionAuthorized(projectId);
     }
 
-    // 3. Materials
+    // 3. Administrator material deletion intents
+    // A material purge requires a short-lived, administrator-created intent.
+    match /adminMaterialDeletionIntents/{intentId} {
+      allow read: if isAdmin() && resource.data.adminUid == request.auth.uid;
+      allow create: if isAdmin() &&
+        request.resource.data.entityType == 'AdminMaterialDeletionIntent' &&
+        request.resource.data.adminUid == request.auth.uid &&
+        request.resource.data.projectId is string &&
+        request.resource.data.materialId is string &&
+        request.resource.data.ownerId is string &&
+        request.resource.data.projectId == intentId.split('__')[0] &&
+        exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+        get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.ownerId == request.resource.data.ownerId;
+      allow update: if false;
+      allow delete: if isAdmin() && resource.data.adminUid == request.auth.uid;
+    }
+
+    // 3b. Administrator purchase deletion intents used to authorize linked transport cleanup.
+    match /adminPurchaseDeletionIntents/{purchaseId} {
+      allow read: if isAdmin() && resource.data.adminUid == request.auth.uid;
+      allow create: if isAdmin() &&
+        request.resource.data.entityType == 'AdminPurchaseDeletionIntent' &&
+        request.resource.data.adminUid == request.auth.uid &&
+        request.resource.data.purchaseId == purchaseId &&
+        request.resource.data.projectId is string &&
+        request.resource.data.materialId is string;
+      allow update: if false;
+      allow delete: if isAdmin() && resource.data.adminUid == request.auth.uid;
+    }
+
+    // 4. Materials
     match /materials/{materialId} {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isAdmin() || (isExistingDocOwner() &&
+      allow delete: if (isAdmin() && isAdminMaterialDeletionAuthorized(resource.data.projectId, materialId)) ||
+        (isExistingDocOwner() &&
         resource.data.totalPurchased == 0 &&
         resource.data.totalUsed == 0);
     }
 
-    // 4. Purchases
+    // 5. Purchases
     match /purchases/{purchaseId} {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() &&
@@ -113,15 +161,16 @@ service cloud.firestore {
         isOwnerImmutable() &&
         isProjectImmutable() &&
         isValidProjectMaterial(request.resource.data.materialId, request.resource.data.projectId);
-      allow delete: if isExistingDocOwner();
+      allow delete: if isExistingDocOwner() || (isAdmin() && isAdminPurchaseDeletionAuthorized(purchaseId));
     }
 
-    // 5. Material Usage
+    // 6. Material Usage
     match /materialUsage/{usageId} {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isExistingDocOwner();
+      allow delete: if isExistingDocOwner() ||
+        (isAdmin() && isAdminMaterialDeletionAuthorized(resource.data.projectId, resource.data.materialId));
     }
 
     // 6. Contractors
@@ -140,12 +189,13 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 8. Transportation & Haulage
+    // 9. Transportation & Haulage
     match /transportation/{transportId} {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isExistingDocOwner();
+      allow delete: if isExistingDocOwner() ||
+        (isAdmin() && resource.data.purchaseId is string && isAdminPurchaseDeletionAuthorized(resource.data.purchaseId));
     }
 
     // 9. Other Site Expenses
@@ -172,10 +222,17 @@ service cloud.firestore {
       allow delete: if isExistingDocOwner();
     }
 
-    // 12. Audit Events (strictly append-only: create allowed, update denied, delete denied)
+    // 13. Audit Events (strictly append-only: create allowed, update denied, delete denied)
     match /auditEvents/{eventId} {
       allow read: if isExistingDocOwner() || isAdmin();
-      allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
+      allow create: if (isCreatingWithOwner() &&
+        request.resource.data.projectId is string &&
+        isUserProject(request.resource.data.projectId)) ||
+        (isAdmin() &&
+        request.resource.data.projectId is string &&
+        exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+        request.resource.data.ownerId == get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.ownerId &&
+        request.resource.data.user == request.auth.uid);
       allow update: if false; // Append-only audit events
       allow delete: if false; // Denied per Requirement 4
     }
