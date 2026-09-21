@@ -118,7 +118,6 @@ service cloud.firestore {
         request.resource.data.projectId is string &&
         request.resource.data.materialId is string &&
         request.resource.data.ownerId is string &&
-        request.resource.data.projectId == intentId.split('__')[0] &&
         exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
         get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.ownerId == request.resource.data.ownerId;
       allow update: if false;
