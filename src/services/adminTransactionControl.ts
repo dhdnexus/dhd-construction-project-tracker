@@ -232,7 +232,7 @@ async function createReconciliationIntent(
   ownerId: string,
   adminUid: string,
 ): Promise<string> {
-  const intentId = `reconcile_${kind}_${id}`;
+  const intentId = id;
   await setDoc(doc(db, 'adminTransactionDeletionIntents', intentId), {
     entityType: kind === 'material' ? 'MaterialReconciliation' : 'ContractorReconciliation',
     entityId: intentId,
