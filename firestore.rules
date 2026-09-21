@@ -79,7 +79,8 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)) &&
         get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.adminUid == request.auth.uid &&
         get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.entityType == entityType &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.entityId == entityId;
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.entityId == entityId &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(entityType + '_' + entityId)).data.projectId == resource.data.projectId;
     }
 
     function isAdminMaterialReconciliationAuthorized(materialId) {
@@ -87,7 +88,8 @@ service cloud.firestore {
         materialId is string &&
         exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_material_' + materialId)) &&
         get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_material_' + materialId)).data.adminUid == request.auth.uid &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_material_' + materialId)).data.reconciliationMaterialId == materialId;
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_material_' + materialId)).data.reconciliationMaterialId == materialId &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_material_' + materialId)).data.projectId == resource.data.projectId;
     }
 
     function isAdminContractorReconciliationAuthorized(contractorId) {
@@ -95,7 +97,8 @@ service cloud.firestore {
         contractorId is string &&
         exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_contractor_' + contractorId)) &&
         get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_contractor_' + contractorId)).data.adminUid == request.auth.uid &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_contractor_' + contractorId)).data.reconciliationContractorId == contractorId;
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_contractor_' + contractorId)).data.reconciliationContractorId == contractorId &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_contractor_' + contractorId)).data.projectId == resource.data.projectId;
     }
 
     // 0. User profiles
