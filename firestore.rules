@@ -56,11 +56,11 @@ service cloud.firestore {
 
     function isAdminMaterialDeletionAuthorized(projId, materialId) {
       return isAdmin() &&
-        exists(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)) &&
-        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)).data.adminUid == request.auth.uid &&
-        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)).data.projectId == projId &&
-        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)).data.materialId == materialId &&
-        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(projId)__$(materialId)).data.entityType == 'AdminMaterialDeletionIntent';
+        exists(/databases/$(database)/documents/adminMaterialDeletionIntents/$(materialId)) &&
+        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(materialId)).data.adminUid == request.auth.uid &&
+        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(materialId)).data.projectId == projId &&
+        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(materialId)).data.materialId == materialId &&
+        get(/databases/$(database)/documents/adminMaterialDeletionIntents/$(materialId)).data.entityType == 'AdminMaterialDeletionIntent';
     }
 
     function isAdminPurchaseDeletionAuthorized(purchaseId) {
