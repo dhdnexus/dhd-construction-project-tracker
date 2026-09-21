@@ -187,11 +187,10 @@ function AuditTable({ events }: { events: AdminAuditRecord[] }) {
   if (events.length === 0) {
     return (
       <div className="py-14 text-center text-sm text-[#75777E]">
-        No audit events are available yet.
+        No audit events match the current filters.
       </div>
     );
   }
-
   return (
     <div className="divide-y divide-[#F0F2FA]">
       {events.slice(0, 30).map((event) => (
@@ -230,6 +229,10 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(null);
   const [pendingDeleteMaterial, setPendingDeleteMaterial] = useState<AdminMaterialRecord | null>(null);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditAction, setAuditAction] = useState('ALL');
+  const [auditProject, setAuditProject] = useState('ALL');
+  const [auditEntity, setAuditEntity] = useState('ALL');
 
   const selectProject = useCallback(async (project: AdminProjectRecord) => {
     setSelectedProjectId(project.id);
@@ -304,6 +307,34 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
   useEffect(() => {
     void load(true);
   }, [load]);
+
+  const filteredAuditEvents = useMemo(() => {
+    const search = auditSearch.trim().toLowerCase();
+    return data.auditEvents.filter((event) => {
+      const matchesAction = auditAction === 'ALL' || event.action === auditAction;
+      const matchesProject = auditProject === 'ALL' || event.projectId === auditProject;
+      const matchesEntity = auditEntity === 'ALL' || event.entity === auditEntity;
+      const haystack = [
+        event.summary,
+        event.userEmail,
+        event.user,
+        event.entity,
+        event.entityId,
+        event.projectId,
+      ].join(' ').toLowerCase();
+      return matchesAction && matchesProject && matchesEntity && (!search || haystack.includes(search));
+    });
+  }, [auditAction, auditEntity, auditProject, auditSearch, data.auditEvents]);
+
+  const auditActions = useMemo(
+    () => Array.from(new Set(data.auditEvents.map((event) => event.action).filter(Boolean))).sort(),
+    [data.auditEvents],
+  );
+
+  const auditEntities = useMemo(
+    () => Array.from(new Set(data.auditEvents.map((event) => event.entity).filter(Boolean))).sort(),
+    [data.auditEvents],
+  );
 
   const activeProjects = data.projects.filter((project) =>
     ['active', 'in progress'].includes(project.status.toLowerCase()),
@@ -604,10 +635,67 @@ export const AdminControlCentre: React.FC<AdminControlCentreProps> = ({ admin, o
             {activeTab === 'audit' && (
               <section className="bg-white border border-[#E8EDFF] rounded-2xl overflow-hidden">
                 <div className="p-4 border-b border-[#E8EDFF]">
-                  <h3 className="text-sm font-bold">Audit Centre</h3>
-                  <p className="text-[11px] text-[#75777E] mt-0.5">Recent append-only audit events across all visible projects.</p>
+                  <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-bold">Audit Centre</h3>
+                      <p className="text-[11px] text-[#75777E] mt-0.5">
+                        Append-only activity across all visible projects. Use filters to isolate a project, action, or record type.
+                      </p>
+                    </div>
+                    <div className="text-[10px] font-bold text-[#75777E]">
+                      {filteredAuditEvents.length} of {data.auditEvents.length} events
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                    <input
+                      value={auditSearch}
+                      onChange={(event) => setAuditSearch(event.target.value)}
+                      placeholder="Search audit activity..."
+                      className="h-9 px-3 rounded-lg border border-[#E8EDFF] bg-[#F9F9FF] text-xs outline-none focus:border-[#6B46C1]"
+                    />
+                    <select
+                      value={auditAction}
+                      onChange={(event) => setAuditAction(event.target.value)}
+                      className="h-9 px-3 rounded-lg border border-[#E8EDFF] bg-[#F9F9FF] text-xs outline-none"
+                    >
+                      <option value="ALL">All actions</option>
+                      {auditActions.map((action) => <option key={action} value={action}>{action}</option>)}
+                    </select>
+                    <select
+                      value={auditEntity}
+                      onChange={(event) => setAuditEntity(event.target.value)}
+                      className="h-9 px-3 rounded-lg border border-[#E8EDFF] bg-[#F9F9FF] text-xs outline-none"
+                    >
+                      <option value="ALL">All record types</option>
+                      {auditEntities.map((entity) => <option key={entity} value={entity}>{entity}</option>)}
+                    </select>
+                    <select
+                      value={auditProject}
+                      onChange={(event) => setAuditProject(event.target.value)}
+                      className="h-9 px-3 rounded-lg border border-[#E8EDFF] bg-[#F9F9FF] text-xs outline-none"
+                    >
+                      <option value="ALL">All projects</option>
+                      {data.projects.map((project) => (
+                        <option key={project.id} value={project.id}>{project.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {(auditSearch || auditAction !== 'ALL' || auditEntity !== 'ALL' || auditProject !== 'ALL') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuditSearch('');
+                        setAuditAction('ALL');
+                        setAuditEntity('ALL');
+                        setAuditProject('ALL');
+                      }}
+                      className="mt-2 text-[10px] font-bold text-[#6B46C1]"
+                    >
+                      Clear filters
+                    </button>
+                  )}
                 </div>
-                <AuditTable events={data.auditEvents} />
+                <AuditTable events={filteredAuditEvents} />
               </section>
             )}
           </>
