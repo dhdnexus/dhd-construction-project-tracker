@@ -85,17 +85,17 @@ service cloud.firestore {
     function isAdminMaterialReconciliationAuthorized(materialId) {
       return isAdmin() &&
         materialId is string &&
-        exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$(materialId)) &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(materialId)).data.adminUid == request.auth.uid &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(materialId)).data.reconciliationMaterialId == materialId;
+        exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_material_' + materialId)) &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_material_' + materialId)).data.adminUid == request.auth.uid &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_material_' + materialId)).data.reconciliationMaterialId == materialId;
     }
 
     function isAdminContractorReconciliationAuthorized(contractorId) {
       return isAdmin() &&
         contractorId is string &&
-        exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$(contractorId)) &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(contractorId)).data.adminUid == request.auth.uid &&
-        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$(contractorId)).data.reconciliationContractorId == contractorId;
+        exists(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_contractor_' + contractorId)) &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_contractor_' + contractorId)).data.adminUid == request.auth.uid &&
+        get(/databases/$(database)/documents/adminTransactionDeletionIntents/$('reconcile_contractor_' + contractorId)).data.reconciliationContractorId == contractorId;
     }
 
     // 0. User profiles
@@ -206,7 +206,7 @@ service cloud.firestore {
         isOwnerImmutable() &&
         isProjectImmutable() &&
         isValidProjectMaterial(request.resource.data.materialId, request.resource.data.projectId);
-      allow delete: if isExistingDocOwner() || isAdminMaterialDeletionAuthorized(resource.data.projectId, resource.data.materialId);
+      allow delete: if isAdminTransactionDeletionAuthorized('Purchase', purchaseId);
     }
 
     // 6. Material Usage
@@ -214,7 +214,7 @@ service cloud.firestore {
       allow read: if isExistingDocOwner() || isAdmin();
       allow create: if isCreatingWithOwner() && request.resource.data.projectId is string && isUserProject(request.resource.data.projectId);
       allow update: if isExistingDocOwner() && isCreatingWithOwner() && isOwnerImmutable() && isProjectImmutable();
-      allow delete: if isAdminTransactionDeletionAuthorized('Purchase', purchaseId);
+      allow delete: if isAdminTransactionDeletionAuthorized('MaterialUsage', usageId);
     }
 
     // 6. Contractors
