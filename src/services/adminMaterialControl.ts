@@ -29,7 +29,7 @@ export interface AdminMaterialRecord {
 }
 
 const QUERY_LIMIT = 500;
-const BATCH_SIZE = 400;
+const BATCH_SIZE = 10;
 const RULE_SAFE_BATCH_SIZE = 10;
 
 function numberValue(value: unknown): number {
@@ -157,6 +157,17 @@ export async function deleteAdminMaterial(
     transportationSnapshot.size >= QUERY_LIMIT
   ) {
     throw new Error('This material has more than 500 linked records or the project has more than 500 transport records. Use the larger-scale administrative deletion workflow instead of this client-side purge.');
+  }
+
+  const recordedPurchaseCount = purchasesSnapshot.size;
+  const recordedUsageCount = usageSnapshot.size;
+  const aggregatePurchased = numberValue(material.totalPurchased);
+  const aggregateUsed = numberValue(material.totalUsed);
+
+  if ((aggregatePurchased > 0 && recordedPurchaseCount === 0) || (aggregateUsed > 0 && recordedUsageCount === 0)) {
+    throw new Error(
+      'Material inventory history is inconsistent: the material shows purchased/used quantities but no linked transaction records were found. Resolve the underlying data before using permanent administrator removal.',
+    );
   }
 
   const purchaseIds = purchasesSnapshot.docs.map((snapshot) => snapshot.id);
